@@ -1,2 +1,8 @@
-variable "project_name" {}
-variable "env" {}
+variable "name" {
+  type = string
+}
+
+variable "tags" {
+  type = map(string)
+  default = {}
+}
