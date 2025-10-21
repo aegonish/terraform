@@ -75,3 +75,27 @@ module "eks" {
   tags                       = var.tags
 }
 
+#########################################
+# Secrets Manager (dynamic name)
+#########################################
+
+locals {
+  timestamp_suffix     = formatdate("YYYYMMDDHHmmss", timestamp())
+  dynamic_secret_name  = "${var.cluster_name}-app-secrets-${local.timestamp_suffix}"
+}
+
+resource "aws_secretsmanager_secret" "app_secrets" {
+  name        = local.dynamic_secret_name
+  description = "Application secrets for ${var.cluster_name}, generated at ${local.timestamp_suffix}"
+  tags        = var.tags
+}
+
+resource "aws_secretsmanager_secret_version" "app_secrets_version" {
+  secret_id     = aws_secretsmanager_secret.app_secrets.id
+  secret_string = jsonencode(var.app_secrets)
+}
+
+output "app_secrets_name" {
+  description = "The dynamic name of the stored app secrets"
+  value       = aws_secretsmanager_secret.app_secrets.name
+}

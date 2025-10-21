@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region"
   type        = string
-  default     = "ap-west-1"
+  default     = "ap-south-1"
 }
 
 variable "aws_profile" {
@@ -19,6 +19,7 @@ variable "cluster_name" {
 variable "cluster_version" {
   description = "EKS Kubernetes version"
   type        = string
+  default     = ""
 }
 
 variable "vpc_cidr" {
@@ -77,4 +78,10 @@ variable "tags" {
     Project     = "aegonish"
     "ManagedBy" = "terraform"
   }
+}
+
+variable "app_secrets" {
+  description = "Map of application secrets to store in AWS Secrets Manager"
+  type        = map(string)
+  sensitive   = true
 }
