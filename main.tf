@@ -63,7 +63,7 @@ module "eks" {
 
   # IAM
   cluster_role_arn           = module.iam.cluster_role_arn
-  cluster_role_name          = module.iam.cluster_role_name   # <--- Added this line
+  cluster_role_name          = module.iam.cluster_role_name
   node_role_arn              = module.iam.node_role_arn
 
   # Node settings
@@ -73,6 +73,8 @@ module "eks" {
   max_size                   = var.node_max_size
 
   tags                       = var.tags
+
+  depends_on = [module.iam, module.vpc]
 }
 
 #########################################
@@ -88,6 +90,11 @@ resource "aws_secretsmanager_secret" "app_secrets" {
   name        = local.dynamic_secret_name
   description = "Application secrets for ${var.cluster_name}, generated at ${local.timestamp_suffix}"
   tags        = var.tags
+
+  recovery_window_in_days = 0
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_secretsmanager_secret_version" "app_secrets_version" {
@@ -98,4 +105,79 @@ resource "aws_secretsmanager_secret_version" "app_secrets_version" {
 output "app_secrets_name" {
   description = "The dynamic name of the stored app secrets"
   value       = aws_secretsmanager_secret.app_secrets.name
+}
+
+#############################################
+# EBS CSI Add-on (AWS-managed, IRSA-ready)
+#############################################
+
+# 1. Get cluster data (depends on module.eks)
+data "aws_eks_cluster" "eks" {
+  name       = module.eks.cluster_name
+  depends_on = [module.eks]
+}
+
+# 2. Create OIDC provider (for IRSA)
+resource "aws_iam_openid_connect_provider" "eks" {
+  client_id_list  = ["sts.amazonaws.com"]
+  # Amazon root CA thumbprint (valid as of 2025 - keep updated in long term)
+  thumbprint_list = ["9e99a48a9960b14926bb7f3b02e22da0afd10eb2"]
+  url             = data.aws_eks_cluster.eks.identity[0].oidc[0].issuer
+}
+
+#############################################
+# IRSA Role for EBS CSI Driver
+#############################################
+
+# Use data by name (safer than hard-coding ARN strings)
+data "aws_iam_policy" "ebs_csi_policy" {
+  name = "AmazonEBSCSIDriverPolicy"
+}
+
+data "aws_iam_policy_document" "ebs_csi_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ebs_csi_irsa" {
+  name               = "${var.cluster_name}-ebs-csi-irsa"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume_role.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi_attach" {
+  role       = aws_iam_role.ebs_csi_irsa.name
+  policy_arn = data.aws_iam_policy.ebs_csi_policy.arn
+}
+
+# Single EKS Addon resource, linked to the IRSA role
+resource "aws_eks_addon" "ebs_csi_driver" {
+  cluster_name                 = module.eks.cluster_name
+  addon_name                   = "aws-ebs-csi-driver"
+  service_account_role_arn     = aws_iam_role.ebs_csi_irsa.arn
+  resolve_conflicts_on_create  = "OVERWRITE"
+  resolve_conflicts_on_update  = "OVERWRITE"
+
+  timeouts {
+    create = "40m"
+    update = "40m"
+  }
+
+  depends_on = [
+    module.eks,
+    aws_iam_openid_connect_provider.eks,
+    aws_iam_role.ebs_csi_irsa
+  ]
 }
