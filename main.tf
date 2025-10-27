@@ -160,6 +160,7 @@ resource "aws_iam_role" "ebs_csi_irsa" {
 resource "aws_iam_role_policy_attachment" "ebs_csi_attach" {
   role       = aws_iam_role.ebs_csi_irsa.name
   policy_arn = data.aws_iam_policy.ebs_csi_policy.arn
+  depends_on = [aws_iam_openid_connect_provider.eks]
 }
 
 # Single EKS Addon resource, linked to the IRSA role
@@ -180,4 +181,80 @@ resource "aws_eks_addon" "ebs_csi_driver" {
     aws_iam_openid_connect_provider.eks,
     aws_iam_role.ebs_csi_irsa
   ]
+}
+
+#############################################
+# EKS Cluster Data Sources (for provider auth)
+#############################################
+
+
+data "aws_eks_cluster_auth" "eks" {
+  name       = module.eks.cluster_name
+  depends_on = [module.eks]
+}
+
+#############################################
+# Kubernetes Provider (connects to EKS)
+#############################################
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.eks.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.eks.token
+}
+
+#############################################
+# ECR Pull Secret for Kubernetes
+#############################################
+
+# 1. Get current AWS credentials
+data "aws_ecr_authorization_token" "ecr_token" {
+  registry_id = "059549668539"
+}
+
+locals {
+  ecr_auth = base64decode(data.aws_ecr_authorization_token.ecr_token.authorization_token)
+  ecr_user = "AWS"
+  ecr_pass = element(split(":", local.ecr_auth), 1)
+}
+
+
+resource "kubernetes_namespace" "aegonish" {
+  metadata {
+    name = "aegonish"
+  }
+
+  depends_on = [
+    module.eks,
+    data.aws_eks_cluster.eks
+  ]
+}
+
+
+# 2. Create Kubernetes Secret for image pull
+resource "kubernetes_secret" "ecr_pull_secret" {
+  metadata {
+    name      = "ecr-creds"
+    namespace = "aegonish"
+  }
+
+  data = {
+    ".dockerconfigjson" = jsonencode({
+      auths = {
+        "059549668539.dkr.ecr.ap-south-1.amazonaws.com" = {
+          username = local.ecr_user
+          password = local.ecr_pass
+          email    = "none"
+        }
+      }
+    })
+  }
+  
+
+  type = "kubernetes.io/dockerconfigjson"
+
+  depends_on = [
+      module.eks,
+      data.aws_eks_cluster.eks,
+      kubernetes_namespace.aegonish
+      ]
 }
