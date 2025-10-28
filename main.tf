@@ -258,3 +258,5 @@ resource "kubernetes_secret" "ecr_pull_secret" {
       kubernetes_namespace.aegonish
       ]
 }
+
+

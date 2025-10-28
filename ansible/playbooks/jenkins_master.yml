@@ -1,0 +1,27 @@
+---
+- name: Configure Jenkins Master
+  hosts: jenkins_master
+  become: yes
+  gather_facts: no   # <---- add this line!
+
+  vars:
+    #ansible_pkg_mgr: yum   # 👈 Force Ansible to use yum
+    ansible_pkg_mgr: dnf
+    ansible_dnf4_use_backend: dnf4   # 👈 key line
+
+  pre_tasks:
+    - name: Install Python 3.8 if needed (Amazon Linux 2 safe version)
+      raw: |
+        set -eux
+        yum install -y amazon-linux-extras || true
+        if ! command -v python3.8 >/dev/null 2>&1; then
+          amazon-linux-extras enable python3.8
+          yum clean metadata
+          yum install -y python3.8
+        fi
+        alternatives --set python /usr/bin/python3.8 || true
+        ln -sf /usr/bin/python3.8 /usr/bin/python3 || true
+      changed_when: false
+
+  roles:
+    - jenkins_master

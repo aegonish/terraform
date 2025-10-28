@@ -1,0 +1,96 @@
+---
+- name: Install Java 17 (required for Jenkins)
+  shell: |
+    amazon-linux-extras install java-openjdk17 -y || yum install -y java-17-amazon-corretto
+
+- name: Add Jenkins repo
+  get_url:
+    url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
+    dest: /etc/yum.repos.d/jenkins.repo
+
+- name: Import Jenkins key
+  rpm_key:
+    state: present
+    key: https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+
+- name: Install Jenkins
+  shell: yum install -y jenkins
+  register: install_output
+  changed_when: "'Nothing to do' not in install_output.stdout"
+
+- name: Set Jenkins Java path to Corretto 17
+  lineinfile:
+    path: /etc/sysconfig/jenkins
+    regexp: '^JAVA_HOME='
+    line: 'JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto'
+    create: yes
+  notify: Restart Jenkins
+
+- name: Enable and start Jenkins service
+  systemd:
+    name: jenkins
+    enabled: yes
+    state: started
+
+# Wait for Jenkins service to come up
+- name: Wait for Jenkins service to be ready
+  uri:
+    url: http://localhost:8080/login
+    status_code: 200
+  register: result
+  retries: 10
+  delay: 10
+  until: result.status == 200
+
+# Install Jenkins plugins from plugins.txt
+- name: Copy plugins list
+  copy:
+    src: plugins.txt
+    dest: /var/lib/jenkins/plugins.txt
+    owner: jenkins
+    group: jenkins
+    mode: '0644'
+
+- name: Gather facts again (ensure ansible_facts available)
+  setup:
+
+- name: Ensure jenkins-plugin-cli is available
+  shell: |
+    mkdir -p /opt/jenkins-cli
+    curl -fL -o /opt/jenkins-cli/plugin-installation-manager.jar \
+      https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.0/jenkins-plugin-manager-2.13.0.jar
+    echo '#!/bin/bash' > /usr/local/bin/jenkins-plugin-cli
+    echo 'java -jar /opt/jenkins-cli/plugin-installation-manager.jar "$@"' >> /usr/local/bin/jenkins-plugin-cli
+    chmod +x /usr/local/bin/jenkins-plugin-cli
+    ls -lh /opt/jenkins-cli/plugin-installation-manager.jar
+  args:
+    executable: /bin/bash
+  register: cli_install
+  changed_when: "'jenkins-plugin-manager.jar' in cli_install.stdout"
+
+
+- name: Install Jenkins plugins
+  shell: |
+    mkdir -p /var/lib/jenkins/plugins
+    cat /var/lib/jenkins/plugins.txt | xargs -n 1 /usr/local/bin/jenkins-plugin-cli \
+      --plugins -d /var/lib/jenkins/plugins
+    chown -R jenkins:jenkins /var/lib/jenkins/plugins
+  args:
+    executable: /bin/bash
+  become: yes
+  tags:
+    - jenkins_plugins
+
+- name: Print Jenkins initial admin password
+  command: cat /var/lib/jenkins/secrets/initialAdminPassword
+  register: admin_pass
+  changed_when: false
+
+- debug:
+    msg: "Jenkins initial admin password: {{ admin_pass.stdout }}"
+
+# Handlers
+#- name: Restart Jenkins
+#  systemd:
+#    name: jenkins
+#    state: restarted

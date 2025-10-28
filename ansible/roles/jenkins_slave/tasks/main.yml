@@ -1,0 +1,12 @@
+---
+- name: Install Java
+  yum:
+    name: java-11-amazon-corretto
+    state: present
+
+- name: Create Jenkins workspace directory
+  file:
+    path: /home/ec2-user/jenkins-agent
+    state: directory
+    owner: ec2-user
+    mode: '0755'

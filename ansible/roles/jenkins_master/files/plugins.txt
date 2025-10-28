@@ -1,0 +1,33 @@
+# Core pipeline + UI
+workflow-aggregator
+pipeline-stage-view
+blueocean
+pipeline-github-lib
+pipeline-utility-steps
+ws-cleanup
+
+# Git + GitHub
+git
+github
+github-branch-source
+git-client
+scm-api
+credentials
+plain-credentials
+
+# Docker build/push
+docker-plugin
+docker-workflow
+docker-commons
+docker-java-api
+
+# AWS + Cloud
+aws-credentials
+amazon-ecr
+cloudbees-folder
+
+# Agents + System
+ssh-slaves
+matrix-auth
+role-strategy
+configuration-as-code

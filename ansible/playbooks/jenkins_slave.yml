@@ -1,0 +1,6 @@
+---
+- name: Configure Jenkins Slave
+  hosts: jenkins_slaves
+  become: yes
+  roles:
+    - jenkins_slave

@@ -1,0 +1,16 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: Update apt cache
+      yum:
+        name: "*"
+        state: latest
+
+    - name: Install dependencies
+      yum:
+        name:
+          - git
+          - java-17-amazon-corretto
+          - wget
+        state: present

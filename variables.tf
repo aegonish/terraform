@@ -85,3 +85,4 @@ variable "app_secrets" {
   type        = map(string)
   sensitive   = true
 }
+
