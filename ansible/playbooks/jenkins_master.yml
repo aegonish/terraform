@@ -24,6 +24,8 @@
 
   roles:
     - jenkins_master
+    - jenkins_credentials
+    - jenkins_pipeline
 
   tasks:
     - name: Include Jenkins credentials role

@@ -1,4 +1,17 @@
 ---
+- name: Ensure Git is installed (safe fallback for Amazon Linux)
+  become: yes
+  shell: |
+    if ! command -v git >/dev/null 2>&1; then
+      yum install -y git || dnf install -y git || amazon-linux-extras install git -y
+    else
+      echo "Git already installed"
+    fi
+  args:
+    executable: /bin/bash
+  register: git_install
+  changed_when: "'already installed' not in git_install.stdout"
+
 - name: Install Java 17 (required for Jenkins)
   shell: |
     amazon-linux-extras install java-openjdk17 -y || yum install -y java-17-amazon-corretto

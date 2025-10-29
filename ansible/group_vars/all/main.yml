@@ -1,2 +1,3 @@
 jenkins_admin_user: "{{ vault_jenkins_admin_user }}"
 jenkins_admin_password: "{{ vault_jenkins_admin_password }}"
+jenkins_admin_token: "{{ vault_jenkins_admin_token }}"

@@ -1,0 +1,54 @@
+import jenkins.model.*
+import hudson.model.*
+import javaposse.jobdsl.plugin.*
+
+def jenkins = Jenkins.instance
+def jobName = "aegonish-blog-pipeline"
+
+// If job already exists, skip recreation
+if (jenkins.getItem(jobName) != null) {
+    println "Job '${jobName}' already exists — skipping creation."
+    return
+}
+
+// Define job configuration XML
+def configXml = """
+<flow-definition plugin="workflow-job">
+  <actions/>
+  <description>Automated Pipeline for Aegonish Blog (via Ansible)</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github">
+      <projectUrl>https://github.com/aegonish/aegonish-blog/</projectUrl>
+      <displayName>aegonish-blog</displayName>
+    </com.coravy.hudson.plugins.github.GithubProjectProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps">
+    <scm class="hudson.plugins.git.GitSCM" plugin="git">
+      <configVersion>2</configVersion>
+      <userRemoteConfigs>
+        <hudson.plugins.git.UserRemoteConfig>
+          <url>https://github.com/aegonish/aegonish-blog.git</url>
+          <credentialsId>github-pat</credentialsId>
+        </hudson.plugins.git.UserRemoteConfig>
+      </userRemoteConfigs>
+      <branches>
+        <hudson.plugins.git.BranchSpec>
+          <name>*/main</name>
+        </hudson.plugins.git.BranchSpec>
+      </branches>
+      <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+      <extensions/>
+    </scm>
+    <scriptPath>Jenkinsfile</scriptPath>
+    <lightweight>true</lightweight>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>
+"""
+
+def xmlStream = new ByteArrayInputStream(configXml.getBytes("UTF-8"))
+def newJob = jenkins.createProjectFromXML(jobName, xmlStream)
+
+println "✅ Created Jenkins pipeline job: ${jobName}"
