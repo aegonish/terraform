@@ -32,7 +32,7 @@
     enabled: yes
     state: started
 
-# Wait for Jenkins service to come up
+# Wait for Jenkins service to be ready
 - name: Wait for Jenkins service to be ready
   uri:
     url: http://localhost:8080/login
@@ -42,7 +42,7 @@
   delay: 10
   until: result.status == 200
 
-# Install Jenkins plugins from plugins.txt
+# Copy plugin list to remote
 - name: Copy plugins list
   copy:
     src: plugins.txt
@@ -51,46 +51,87 @@
     group: jenkins
     mode: '0644'
 
-- name: Gather facts again (ensure ansible_facts available)
+# Ensure facts are loaded
+- name: Gather facts again
   setup:
 
+# Download and set up the Jenkins Plugin CLI
 - name: Ensure jenkins-plugin-cli is available
+  become: true
   shell: |
     mkdir -p /opt/jenkins-cli
-    curl -fL -o /opt/jenkins-cli/plugin-installation-manager.jar \
-      https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.0/jenkins-plugin-manager-2.13.0.jar
-    echo '#!/bin/bash' > /usr/local/bin/jenkins-plugin-cli
-    echo 'java -jar /opt/jenkins-cli/plugin-installation-manager.jar "$@"' >> /usr/local/bin/jenkins-plugin-cli
+    curl -fsSL -o /opt/jenkins-cli/plugin-installation-manager.jar \
+      https://repo.jenkins-ci.org/releases/io/jenkins/plugin-management/plugin-installation-manager-tool/2.13.2/plugin-installation-manager-tool-2.13.2.jar
+    cat <<'EOF' > /usr/local/bin/jenkins-plugin-cli
+    #!/bin/bash
+    exec java -jar /opt/jenkins-cli/plugin-installation-manager.jar "$@"
+    EOF
     chmod +x /usr/local/bin/jenkins-plugin-cli
-    ls -lh /opt/jenkins-cli/plugin-installation-manager.jar
   args:
     executable: /bin/bash
-  register: cli_install
-  changed_when: "'jenkins-plugin-manager.jar' in cli_install.stdout"
 
+# Ensure Jenkins plugin directory exists
+- name: Ensure Jenkins plugins directory exists
+  file:
+    path: /var/lib/jenkins/plugins
+    state: directory
+    owner: jenkins
+    group: jenkins
+    mode: '0755'
 
-- name: Install Jenkins plugins
+# Install all plugins safely and explicitly into Jenkins home
+- name: Install Jenkins plugins (safe iterative install)
+  become: true
   shell: |
-    mkdir -p /var/lib/jenkins/plugins
-    cat /var/lib/jenkins/plugins.txt | xargs -n 1 /usr/local/bin/jenkins-plugin-cli \
-      --plugins -d /var/lib/jenkins/plugins
-    chown -R jenkins:jenkins /var/lib/jenkins/plugins
+    set -e
+    while read -r plugin; do
+      [ -z "$plugin" ] && continue
+      echo "Installing plugin: $plugin"
+      /usr/local/bin/jenkins-plugin-cli --plugins "$plugin" -d /var/lib/jenkins/plugins
+    done < /var/lib/jenkins/plugins.txt
   args:
     executable: /bin/bash
-  become: yes
+  environment:
+    JENKINS_UC: "https://updates.jenkins.io"
+    JENKINS_HOME: "/var/lib/jenkins"
+  register: plugin_install
+  changed_when: "'Installing plugin:' in plugin_install.stdout"
   tags:
     - jenkins_plugins
 
+# Fix permissions on plugin directory
+- name: Fix ownership and permissions on Jenkins plugins
+  become: true
+  file:
+    path: /var/lib/jenkins/plugins
+    owner: jenkins
+    group: jenkins
+    recurse: yes
+
+# Restart Jenkins to activate plugins
+- name: Restart Jenkins to load new plugins
+  become: true
+  systemd:
+    name: jenkins
+    state: restarted
+
+# Wait until Jenkins comes back online
+- name: Wait for Jenkins to come back online
+  uri:
+    url: http://localhost:8080/login
+    status_code: 200
+    timeout: 120
+  register: jenkins_up
+  retries: 12
+  delay: 10
+  until: jenkins_up.status == 200
+
+# Show initial password (if exists)
 - name: Print Jenkins initial admin password
   command: cat /var/lib/jenkins/secrets/initialAdminPassword
   register: admin_pass
+  failed_when: false
   changed_when: false
 
 - debug:
-    msg: "Jenkins initial admin password: {{ admin_pass.stdout }}"
-
-# Handlers
-#- name: Restart Jenkins
-#  systemd:
-#    name: jenkins
-#    state: restarted
+    msg: "Jenkins initial admin password: {{ admin_pass.stdout | default('Already initialized or file missing') }}"
