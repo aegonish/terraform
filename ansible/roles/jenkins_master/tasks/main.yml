@@ -26,6 +26,51 @@
     create: yes
   notify: Restart Jenkins
 
+# 🔧 Disable CSRF protection and ensure admin realm is configured for automation
+- name: Allow Jenkins automation API (disable CSRF temporarily)
+  become: yes
+  lineinfile:
+    path: /etc/sysconfig/jenkins
+    regexp: '^JENKINS_ARGS='
+    line: >-
+      JENKINS_ARGS="--argumentsRealm.passwd.aegonish={{ jenkins_admin_password }}
+      --argumentsRealm.roles.aegonish=admin --httpPort=8080 --csrfProtection=false"
+  notify: Restart Jenkins
+
+  # 🔁 Restart Jenkins after disabling CSRF (so it takes effect)
+- name: Restart Jenkins to apply CSRF disable
+  become: true
+  systemd:
+    name: jenkins
+    state: restarted
+
+# Wait for Jenkins to restart and become ready
+- name: Wait for Jenkins to be ready after CSRF change
+  uri:
+    url: http://localhost:8080/login
+    status_code: 200
+  register: jenkins_after_csrf
+  retries: 15
+  delay: 10
+  until: jenkins_after_csrf.status == 200
+
+
+# 🔧 Create minimal script approval file so Groovy via API works
+- name: Ensure script approval file exists
+  become: yes
+  copy:
+    dest: /var/lib/jenkins/scriptApproval.xml
+    content: |
+      <scriptApproval plugin="script-security@1271.vfe18c1e88cc8">
+        <approvedScriptHashes/>
+        <approvedSignatures/>
+        <aclApprovedSignatures/>
+        <approvedClasspathEntries/>
+      </scriptApproval>
+    owner: jenkins
+    group: jenkins
+    mode: '0644'
+
 - name: Enable and start Jenkins service
   systemd:
     name: jenkins
@@ -107,6 +152,17 @@
     owner: jenkins
     group: jenkins
     recurse: yes
+
+# ===============================================================
+# Disable CSRF protection & enable script execution via API
+# ===============================================================
+- name: Disable Jenkins CSRF protection and enable script console via API
+  become: true
+  lineinfile:
+    path: /etc/sysconfig/jenkins
+    regexp: '^JENKINS_ARGS='
+    line: 'JENKINS_ARGS="--webroot=%C/jenkins/war --httpPort=8080 --csrfProtection=false --argumentsRealm.passwd.aegonish=Anishk@78995 --argumentsRealm.roles.aegonish=admin"'
+  notify: Restart Jenkins
 
 # Restart Jenkins to activate plugins
 - name: Restart Jenkins to load new plugins

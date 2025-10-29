@@ -21,3 +21,5 @@ ssh-slaves
 matrix-auth
 role-strategy
 configuration-as-code
+credentials-binding
+cloudbees-folder

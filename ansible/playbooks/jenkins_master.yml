@@ -2,12 +2,11 @@
 - name: Configure Jenkins Master
   hosts: jenkins_master
   become: yes
-  gather_facts: no   # <---- add this line!
+  gather_facts: no   # <---- keep this, it's fine
 
   vars:
-    #ansible_pkg_mgr: yum   # 👈 Force Ansible to use yum
     ansible_pkg_mgr: dnf
-    ansible_dnf4_use_backend: dnf4   # 👈 key line
+    ansible_dnf4_use_backend: dnf4
 
   pre_tasks:
     - name: Install Python 3.8 if needed (Amazon Linux 2 safe version)
@@ -25,3 +24,10 @@
 
   roles:
     - jenkins_master
+
+  tasks:
+    - name: Include Jenkins credentials role
+      import_role:
+        name: jenkins_credentials
+      tags:
+        - jenkins_credentials

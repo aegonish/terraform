@@ -1,0 +1,41 @@
+---
+# ==========================================================
+# Role: jenkins_credentials
+# Purpose: Auto-create Jenkins credentials via init script
+# ==========================================================
+
+- name: Ensure Jenkins init.groovy.d directory exists
+  file:
+    path: /var/lib/jenkins/init.groovy.d
+    state: directory
+    owner: jenkins
+    group: jenkins
+    mode: '0755'
+  become: yes
+
+- name: Create Jenkins init script for credentials
+  template:
+    src: init_create_credentials.groovy.j2
+    dest: /var/lib/jenkins/init.groovy.d/init_create_credentials.groovy
+    owner: jenkins
+    group: jenkins
+    mode: '0644'
+  become: yes
+
+- name: Restart Jenkins to apply credentials
+  become: yes
+  systemd:
+    name: jenkins
+    state: restarted
+
+- name: Wait for Jenkins to be back online
+  uri:
+    url: http://localhost:8080/login
+    status_code: 200
+  register: jenkins_up
+  retries: 10
+  delay: 10
+  until: jenkins_up.status == 200
+
+- debug:
+    msg: "✅ Jenkins credentials initialized from init.groovy.d successfully"
