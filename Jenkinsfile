@@ -97,8 +97,15 @@ pipeline {
 
         stage('Verify Nodes') {
             steps {
-                bat "kubectl get nodes"
-            }
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-jenkins-creds',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    bat "kubectl get nodes"
+                }
+            }            
         }
 
         stage('Apply IAM OpenID Connect Provider') {
