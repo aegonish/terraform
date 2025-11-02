@@ -15,7 +15,10 @@ pipeline {
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
-                        bat "terraform init -upgrade"
+                        bat """
+                        set AWS_PROFILE=
+                        terraform init -upgrade
+                        """
                     }
                 }
             }
@@ -38,7 +41,10 @@ pipeline {
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
-                        bat "terraform plan"
+                        bat """
+                        set AWS_PROFILE=
+                        terraform plan
+                        """
                     }
                 }
             }
@@ -53,7 +59,10 @@ pipeline {
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
-                        bat "terraform apply -auto-approve"
+                        bat """
+                        set AWS_PROFILE=
+                        terraform apply -auto-approve
+                        """
                     }
                 }
             }
