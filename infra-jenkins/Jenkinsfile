@@ -7,25 +7,33 @@ pipeline {
     stages {
         stage('Terraform Init') {
             steps {
-                bat "terraform init -upgrade"
+                dir('infra-jenkins') {
+                    bat "terraform init -upgrade"
+                }
             }
         }
 
         stage('Terraform Validate') {
             steps {
-                bat "terraform validate"
+                dir('infra-jenkins') {
+                    bat "terraform validate"
+                }
             }
         }
 
         stage('Terraform Plan') {
             steps {
-                bat "terraform plan"
+                dir('infra-jenkins') {
+                    bat "terraform plan"
+                }
             }
         }
 
         stage('Terraform Apply') {
             steps {
-                bat "terraform apply -auto-approve"
+                dir('infra-jenkins') {
+                    bat "terraform apply -auto-approve"
+                }
             }
         }
     }
