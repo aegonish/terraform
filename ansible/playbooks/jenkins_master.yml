@@ -1,35 +1,41 @@
 ---
-- name: Configure Jenkins Master
-  hosts: jenkins_master
+- hosts: jenkins_master
   become: yes
-  gather_facts: no   # <---- keep this, it's fine
-
-  vars:
-    ansible_pkg_mgr: dnf
-    ansible_dnf4_use_backend: dnf4
+  gather_facts: no  # ✅ Prevent Python 3.7 failure on startup
 
   pre_tasks:
-    - name: Install Python 3.8 if needed (Amazon Linux 2 safe version)
-      raw: |
-        set -eux
-        yum install -y amazon-linux-extras || true
-        if ! command -v python3.8 >/dev/null 2>&1; then
-          amazon-linux-extras enable python3.8
-          yum clean metadata
-          yum install -y python3.8
-        fi
-        alternatives --set python /usr/bin/python3.8 || true
-        ln -sf /usr/bin/python3.8 /usr/bin/python3 || true
+    - name: ✅ Install Python 3.8 and set as default
+      shell: |
+        sudo yum install -y python38 python3-pip
+        sudo alternatives --set python /usr/bin/python3.8
+        sudo ln -sf /usr/bin/python3.8 /usr/bin/python3
+      args:
+        executable: /bin/bash
+      tags: always
+
+    - name: ✅ Wait for Python to be ready before enabling facts
+      raw: "echo 'Python OK'"
       changed_when: false
+      tags: always
+
+    - name: ✅ Tell Ansible to use Python 3.8 going forward
+      set_fact:
+        ansible_python_interpreter: /usr/bin/python3.8
+      tags: always
+
+    - name: ✅ Enable fact gathering now that Python 3.8 is active
+      setup:
+      tags: always
 
   roles:
-    - jenkins_master
-    - jenkins_credentials
-    - jenkins_pipeline
+    - role: jenkins_master
+      tags: jenkins_master
 
-  tasks:
-    - name: Include Jenkins credentials role
-      import_role:
-        name: jenkins_credentials
-      tags:
-        - jenkins_credentials
+    - role: jenkins_credentials
+      tags: jenkins_credentials
+
+    - role: jenkins_pipeline
+      tags: jenkins_pipeline
+
+    - role: jenkins_slave
+      tags: jenkins_slave

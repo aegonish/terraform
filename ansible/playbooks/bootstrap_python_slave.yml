@@ -1,0 +1,19 @@
+---
+- name: Bootstrap Python 3.8 on Amazon Linux 2 - Slave
+  hosts: jenkins_slave
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Install Python 3.8 and symlink as default
+      raw: |
+        set -eux
+        yum install -y amazon-linux-extras || true
+        amazon-linux-extras enable python3.8 || true
+        yum clean metadata
+        yum install -y python3.8 || true
+        alternatives --set python /usr/bin/python3.8 || true
+        ln -sf /usr/bin/python3.8 /usr/bin/python3 || true
+        ln -sf /usr/bin/python3.8 /usr/local/bin/python3 || true
+        python3.8 --version
+      changed_when: false

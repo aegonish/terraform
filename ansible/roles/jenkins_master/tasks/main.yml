@@ -39,7 +39,7 @@
     create: yes
   notify: Restart Jenkins
 
-# 🔧 Disable CSRF protection and ensure admin realm is configured for automation
+# Disable CSRF + enable simple automation args (you already had this)
 - name: Allow Jenkins automation API (disable CSRF temporarily)
   become: yes
   lineinfile:
@@ -50,14 +50,12 @@
       --argumentsRealm.roles.aegonish=admin --httpPort=8080 --csrfProtection=false"
   notify: Restart Jenkins
 
-  # 🔁 Restart Jenkins after disabling CSRF (so it takes effect)
 - name: Restart Jenkins to apply CSRF disable
   become: true
   systemd:
     name: jenkins
     state: restarted
 
-# Wait for Jenkins to restart and become ready
 - name: Wait for Jenkins to be ready after CSRF change
   uri:
     url: http://localhost:8080/login
@@ -67,8 +65,6 @@
   delay: 10
   until: jenkins_after_csrf.status == 200
 
-
-# 🔧 Create minimal script approval file so Groovy via API works
 - name: Ensure script approval file exists
   become: yes
   copy:
@@ -90,7 +86,6 @@
     enabled: yes
     state: started
 
-# Wait for Jenkins service to be ready
 - name: Wait for Jenkins service to be ready
   uri:
     url: http://localhost:8080/login
@@ -100,7 +95,6 @@
   delay: 10
   until: result.status == 200
 
-# Copy plugin list to remote
 - name: Copy plugins list
   copy:
     src: plugins.txt
@@ -109,17 +103,36 @@
     group: jenkins
     mode: '0644'
 
-# Ensure facts are loaded
 - name: Gather facts again
   setup:
 
-# Download and set up the Jenkins Plugin CLI
+# ---------- plugin-management-cli (replaces plugin-installation-manager-tool, 2025 verified) ----------
 - name: Ensure jenkins-plugin-cli is available
   become: true
   shell: |
+    set -eux
     mkdir -p /opt/jenkins-cli
-    curl -fsSL -o /opt/jenkins-cli/plugin-installation-manager.jar \
-      https://repo.jenkins-ci.org/releases/io/jenkins/plugin-management/plugin-installation-manager-tool/2.13.2/plugin-installation-manager-tool-2.13.2.jar
+
+    # ✅ Official 2025 repo path for plugin-management-cli
+    try_urls=(
+      "https://repo.jenkins-ci.org/artifactory/releases/io/jenkins/plugin-management/plugin-management-cli/2.13.0/plugin-management-cli-2.13.0.jar"
+      "https://repo.jenkins-ci.org/artifactory/releases/io/jenkins/plugin-management/plugin-management-cli/2.12.0/plugin-management-cli-2.12.0.jar"
+    )
+
+    downloaded=""
+    for url in "${try_urls[@]}"; do
+      echo "trying $url"
+      if curl -fsSL -o /opt/jenkins-cli/plugin-installation-manager.jar "$url"; then
+        downloaded="yes"
+        break
+      fi
+    done
+
+    if [ -z "$downloaded" ]; then
+      echo "ERROR: Could not download plugin-management-cli jar" >&2
+      exit 22
+    fi
+
     cat <<'EOF' > /usr/local/bin/jenkins-plugin-cli
     #!/bin/bash
     exec java -jar /opt/jenkins-cli/plugin-installation-manager.jar "$@"
@@ -128,7 +141,8 @@
   args:
     executable: /bin/bash
 
-# Ensure Jenkins plugin directory exists
+
+# ensure plugin directory
 - name: Ensure Jenkins plugins directory exists
   file:
     path: /var/lib/jenkins/plugins
@@ -137,15 +151,16 @@
     group: jenkins
     mode: '0755'
 
-# Install all plugins safely and explicitly into Jenkins home
+# install plugins, but make loop tolerant and show output
 - name: Install Jenkins plugins (safe iterative install)
   become: true
   shell: |
-    set -e
-    while read -r plugin; do
+    set -eux
+    while IFS= read -r plugin || [ -n "$plugin" ]; do
+      plugin="$(echo "$plugin" | tr -d '\r\n')"
       [ -z "$plugin" ] && continue
       echo "Installing plugin: $plugin"
-      /usr/local/bin/jenkins-plugin-cli --plugins "$plugin" -d /var/lib/jenkins/plugins
+      /usr/local/bin/jenkins-plugin-cli --plugin-download-directory /var/lib/jenkins/plugins --plugins "$plugin" || echo "plugin install returned non-zero for $plugin (continuing)"
     done < /var/lib/jenkins/plugins.txt
   args:
     executable: /bin/bash
@@ -153,11 +168,10 @@
     JENKINS_UC: "https://updates.jenkins.io"
     JENKINS_HOME: "/var/lib/jenkins"
   register: plugin_install
-  changed_when: "'Installing plugin:' in plugin_install.stdout"
+  changed_when: plugin_install.rc == 0 and plugin_install.stdout|default('') != ""
   tags:
     - jenkins_plugins
 
-# Fix permissions on plugin directory
 - name: Fix ownership and permissions on Jenkins plugins
   become: true
   file:
@@ -166,26 +180,21 @@
     group: jenkins
     recurse: yes
 
-# ===============================================================
-# Disable CSRF protection & enable script execution via API
-# ===============================================================
-- name: Disable Jenkins CSRF protection and enable script console via API
+- name: Disable Jenkins CSRF protection and enable script console via API (final ensure)
   become: true
   lineinfile:
     path: /etc/sysconfig/jenkins
     regexp: '^JENKINS_ARGS='
-    line: 'JENKINS_ARGS="--webroot=%C/jenkins/war --httpPort=8080 --csrfProtection=false --argumentsRealm.passwd.aegonish=Anishk@78995 --argumentsRealm.roles.aegonish=admin"'
+    line: 'JENKINS_ARGS="--webroot=%C/jenkins/war --httpPort=8080 --csrfProtection=false --argumentsRealm.passwd.aegonish={{ jenkins_admin_password }} --argumentsRealm.roles.aegonish=admin"'
   notify: Restart Jenkins
 
-# Restart Jenkins to activate plugins
 - name: Restart Jenkins to load new plugins
   become: true
   systemd:
     name: jenkins
     state: restarted
 
-# Wait until Jenkins comes back online
-- name: Wait for Jenkins to come back online
+- name: Wait until Jenkins comes back online
   uri:
     url: http://localhost:8080/login
     status_code: 200
@@ -195,7 +204,6 @@
   delay: 10
   until: jenkins_up.status == 200
 
-# Show initial password (if exists)
 - name: Print Jenkins initial admin password
   command: cat /var/lib/jenkins/secrets/initialAdminPassword
   register: admin_pass

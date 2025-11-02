@@ -1,9 +1,4 @@
 ---
-# ==========================================================
-# Role: jenkins_pipeline
-# Purpose: Create a Jenkins pipeline job from a GitHub repo
-# ==========================================================
-
 - name: Wait for Jenkins to be ready before creating the pipeline job
   uri:
     url: http://localhost:8080/login
@@ -14,7 +9,6 @@
   until: jenkins_ready.status == 200
   tags: [jenkins_pipeline]
 
-# 🧠 Generate Groovy script that creates the pipeline job
 - name: Create Jenkins pipeline job Groovy script from template
   template:
     src: create_pipeline_job.groovy.j2
@@ -22,7 +16,6 @@
   become: yes
   tags: [jenkins_pipeline]
 
-# 🔍 Slurp the generated script for sending via API
 - name: Read Groovy script content from remote node
   slurp:
     src: /tmp/create_pipeline_job.groovy
@@ -30,7 +23,6 @@
   become: yes
   tags: [jenkins_pipeline]
 
-# 🧩 Send it to Jenkins via the Script API
 - name: Push pipeline creation Groovy script to Jenkins
   uri:
     url: "http://localhost:8080/scriptText"
@@ -38,17 +30,21 @@
     user: "{{ jenkins_admin_user }}"
     password: "{{ jenkins_admin_token }}"
     force_basic_auth: yes
-    body: "script={{ pipeline_script['content'] | b64decode | urlencode }}"
+    body: "script={{ (pipeline_script.content | default('') ) | b64decode | urlencode }}"
     headers:
       Content-Type: application/x-www-form-urlencoded
   register: groovy_output
-  failed_when: groovy_output.status not in [200, 201]
-  changed_when: true
+  # fail when HTTP status not in 200..201 or response contains Exception
+  failed_when: >
+    (groovy_output.status is defined and groovy_output.status not in [200,201])
+    or ("Exception" in (groovy_output.content | default('')) )
+  changed_when: groovy_output.status is defined and groovy_output.status in [200,201]
   tags: [jenkins_pipeline]
 
 - name: Print Jenkins pipeline creation result
   debug:
     msg: >
-      ✅ Jenkins pipeline creation finished with status {{ groovy_output.status }}
-      {{ groovy_output.msg | default('') }}
+      ✅ Jenkins pipeline creation finished.
+      Status: {{ groovy_output.status | default('n/a') }}
+      Response: {{ (groovy_output.content | default(''))[:400] | default('no content') }}
   tags: [jenkins_pipeline]

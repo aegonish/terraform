@@ -1,0 +1,60 @@
+---
+- name: Download Jenkins agent.jar on slave
+  become: yes
+  ansible.builtin.shell: |
+    curl -fsSL -o /opt/jenkins/agent.jar http://{{ jenkins_master_ip }}:8080/jnlpJars/agent.jar
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ jenkins_slave_ip }}"
+
+# Read secret from Jenkins Master Node config
+- name: Get Jenkins agent secret from master
+  become: yes
+  ansible.builtin.command:
+    cmd: "cat /var/lib/jenkins/nodes/slave-node/secret-file"
+  register: agent_secret_raw
+
+- set_fact:
+    agent_secret: "{{ agent_secret_raw.stdout | trim }}"
+
+- name: Create Jenkins agent startup script on slave
+  become: yes
+  ansible.builtin.copy:
+    dest: /opt/jenkins/start-agent.sh
+    content: |
+      #!/bin/bash
+      java -jar /opt/jenkins/agent.jar \
+        -url http://{{ jenkins_master_ip }}:8080/ \
+        -secret {{ agent_secret }} \
+        -name "slave-node" \
+        -webSocket \
+        -workDir "/opt/jenkins"
+    mode: '0755'
+  delegate_to: "{{ jenkins_slave_ip }}"
+
+# 👇 Optional — auto-start agent after reboot
+- name: Register Jenkins agent as a service
+  become: yes
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/jenkins-agent.service
+    content: |
+      [Unit]
+      Description=Aegonish Jenkins Agent
+      After=network.target
+
+      [Service]
+      ExecStart=/opt/jenkins/start-agent.sh
+      User=ec2-user
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+  delegate_to: "{{ jenkins_slave_ip }}"
+
+- name: Enable and start Jenkins agent
+  become: yes
+  ansible.builtin.systemd:
+    name: jenkins-agent
+    enabled: yes
+    state: started
+  delegate_to: "{{ jenkins_slave_ip }}"

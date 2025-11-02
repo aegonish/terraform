@@ -13,7 +13,7 @@
     mode: '0755'
   become: yes
 
-- name: Create Jenkins init script for credentials
+- name: Template Jenkins credentials init script
   template:
     src: init_create_credentials.groovy.j2
     dest: /var/lib/jenkins/init.groovy.d/init_create_credentials.groovy
@@ -22,20 +22,37 @@
     mode: '0644'
   become: yes
 
-- name: Restart Jenkins to apply credentials
+# ✅ FORCE JENKINS TO RUN init.groovy.d SCRIPTS AGAIN
+- name: Remove Jenkins setup completion files
+  become: yes
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/jenkins/jenkins.install.UpgradeWizard.state
+    - /var/lib/jenkins/jenkins.install.InstallUtil.lastExecVersion
+  register: removed_wizard
+
+- name: Restart Jenkins so init script executes
   become: yes
   systemd:
     name: jenkins
     state: restarted
+    daemon_reload: yes
 
-- name: Wait for Jenkins to be back online
+# ✅ Ensure Jenkins is fully online before we check anything
+- name: Wait for Jenkins login page to be available
   uri:
     url: http://localhost:8080/login
     status_code: 200
   register: jenkins_up
-  retries: 10
-  delay: 10
+  retries: 20
+  delay: 6
   until: jenkins_up.status == 200
 
+# ✅ Debug output for faster troubleshooting
 - debug:
-    msg: "✅ Jenkins credentials initialized from init.groovy.d successfully"
+    msg:
+      - "🎯 Jenkins Init Script installed: /var/lib/jenkins/init.groovy.d/init_create_credentials.groovy"
+      - "🛑 Setup wizard reset: {{ removed_wizard.changed }}"
+      - "✅ Jenkins restarted & up. Credentials should now exist!"

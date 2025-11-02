@@ -1,3 +1,13 @@
 jenkins_admin_user: "{{ vault_jenkins_admin_user }}"
 jenkins_admin_password: "{{ vault_jenkins_admin_password }}"
 jenkins_admin_token: "{{ vault_jenkins_admin_token }}"
+jenkins_slave_ip: "43.205.228.58"
+jenkins_master_ip: "43.205.238.217"
+github_credential_id: "github-pat"
+dockerhub_credential_id: "dockerhub-credentials"
+aws_credential_id: "aws-creds"
+env_file_credential_id: "env-file"
+slave_ssh_credential_id: "slave-ssh-key"
+jenkins_slave_name: "slave-node"
+jenkins_slave_secret: "slave-secret-filled-by-jenkins"
+

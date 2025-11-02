@@ -23,3 +23,5 @@ role-strategy
 configuration-as-code
 credentials-binding
 cloudbees-folder
+workflow-aws
+pipeline-aws

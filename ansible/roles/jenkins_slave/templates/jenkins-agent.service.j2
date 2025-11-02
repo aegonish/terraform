@@ -1,0 +1,12 @@
+[Unit]
+Description=Jenkins JNLP Agent
+After=network.target docker.service
+
+[Service]
+ExecStart=/usr/bin/java -jar /opt/jenkins/agent.jar -jnlpUrl http://{{ jenkins_master_ip }}:8080/computer/{{ jenkins_slave_name }}/jenkins-agent.jnlp -secret {{ jenkins_slave_secret }} -workDir /opt/jenkins
+User=ec2-user
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

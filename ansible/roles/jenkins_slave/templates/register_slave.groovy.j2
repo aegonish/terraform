@@ -1,0 +1,24 @@
+import jenkins.model.*
+import hudson.slaves.*
+import hudson.model.*
+
+String nodeName = "{{ jenkins_slave_name }}"
+String slaveHost = "{{ jenkins_slave_ip }}"
+String labelString = "local-agent"
+
+if (Jenkins.instance.getNode(nodeName) == null) {
+    DumbSlave slave = new DumbSlave(
+        nodeName,
+        "/opt/jenkins",
+        new JNLPLauncher()
+    )
+    slave.setNumExecutors(1)
+    slave.setMode(Node.Mode.NORMAL)
+    slave.setLabelString(labelString)
+    slave.setRetentionStrategy(new RetentionStrategy.Always())
+
+    Jenkins.instance.addNode(slave)
+    println "✅ Jenkins Slave Registered: ${nodeName}"
+} else {
+    println "ℹ️ Node already exists: ${nodeName}"
+}
