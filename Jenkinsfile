@@ -27,39 +27,57 @@ pipeline {
 
         stage('Terraform Plan') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat "terraform plan"
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform plan
+                    """
                 }
             }
         }
 
         stage('Apply VPC Module') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat 'terraform apply -target="module.vpc" -auto-approve'
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform apply -target="module.vpc" -auto-approve
+                    """
                 }
             }
         }
 
         stage('Apply EKS Module') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat 'terraform apply -target="module.eks" -auto-approve'
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform apply -target="module.eks" -auto-approve
+                    """
                 }
             }
         }
@@ -85,13 +103,19 @@ pipeline {
 
         stage('Apply IAM OpenID Connect Provider') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat 'terraform apply -target="aws_iam_openid_connect_provider.eks" -auto-approve'
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform apply -target="aws_iam_openid_connect_provider.eks" -auto-approve
+                    """
                 }
             }
         }
@@ -111,13 +135,19 @@ pipeline {
 
         stage('Apply IAM Role Policy Attachment') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat 'terraform apply -target="aws_iam_role_policy_attachment.ebs_csi_attach" -auto-approve'
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform apply -target="aws_iam_role_policy_attachment.ebs_csi_attach" -auto-approve
+                    """
                 }
             }
         }
@@ -137,52 +167,76 @@ pipeline {
 
         stage('Apply IAM Module') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat 'terraform apply -target="module.iam" -auto-approve'
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform apply -target="module.iam" -auto-approve
+                    """
                 }
             }
         }
 
         stage('Apply ECR Module') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat 'terraform apply -target="module.ecr" -auto-approve'
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform apply -target="module.ecr" -auto-approve
+                    """
                 }
             }
         }
 
         stage('Apply EBS CSI Driver Addon') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat 'terraform apply -target="aws_eks_addon.ebs_csi_driver" -auto-approve'
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform apply -target="aws_eks_addon.ebs_csi_driver" -auto-approve
+                    """
                 }
             }
         }
 
         stage('Final Full Apply') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins-creds',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    bat "terraform apply -auto-approve"
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform apply -auto-approve
+                    """
                 }
             }
         }
