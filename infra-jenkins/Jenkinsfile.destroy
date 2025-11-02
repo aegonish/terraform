@@ -7,13 +7,17 @@ pipeline {
     stages {
         stage('Terraform Init') {
             steps {
-                bat "terraform init -upgrade"
+                dir('infra-jenkins') {
+                    bat "terraform init -upgrade"
+                }
             }
         }
 
         stage('Terraform Destroy') {
             steps {
-                bat "terraform destroy -auto-approve"
+                dir('infra-jenkins') {
+                    bat "terraform destroy -auto-approve"
+                }
             }
         }
     }
