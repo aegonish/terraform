@@ -1,0 +1,41 @@
+pipeline {
+    agent any
+    environment {
+        AWS_REGION = "ap-south-1"
+    }
+
+    stages {
+        stage('Terraform Init') {
+            steps {
+                bat "terraform init -upgrade"
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                bat "terraform validate"
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                bat "terraform plan"
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                bat "terraform apply -auto-approve"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Jenkins Infra deployment complete"
+        }
+        failure {
+            echo "❌ Terraform failed for Jenkins Infra"
+        }
+    }
+}

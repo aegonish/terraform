@@ -1,0 +1,29 @@
+pipeline {
+    agent any
+    environment {
+        AWS_REGION = "ap-south-1"
+    }
+
+    stages {
+        stage('Terraform Init') {
+            steps {
+                bat "terraform init -upgrade"
+            }
+        }
+
+        stage('Terraform Destroy') {
+            steps {
+                bat "terraform destroy -auto-approve"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Infrastructure destroyed successfully!"
+        }
+        failure {
+            echo "❌ Destroy operation failed!"
+        }
+    }
+}
