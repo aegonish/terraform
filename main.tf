@@ -4,6 +4,12 @@
 terraform {
   required_version = ">= 1.5.0"
 
+    backend "s3" {
+    bucket = "aegonish-tf-state"  # Same bucket
+    key    = "eks-cluster/terraform.tfstate"  # Different key path
+    region = "ap-south-1"
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
