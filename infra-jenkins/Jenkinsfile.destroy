@@ -8,6 +8,7 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 dir('infra-jenkins') {
+                    bat "ls"
                     bat "terraform init -upgrade"
                 }
             }
