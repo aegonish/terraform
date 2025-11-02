@@ -2,13 +2,21 @@ pipeline {
     agent any
     environment {
         AWS_REGION = "ap-south-1"
+        AWS_DEFAULT_REGION = "ap-south-1"
     }
 
     stages {
         stage('Terraform Init') {
             steps {
                 dir('infra-jenkins') {
-                    bat "terraform init -upgrade"
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        bat "terraform init -upgrade"
+                    }
                 }
             }
         }
@@ -24,7 +32,14 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 dir('infra-jenkins') {
-                    bat "terraform plan"
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        bat "terraform plan"
+                    }
                 }
             }
         }
@@ -32,7 +47,14 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 dir('infra-jenkins') {
-                    bat "terraform apply -auto-approve"
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        bat "terraform apply -auto-approve"
+                    }
                 }
             }
         }
