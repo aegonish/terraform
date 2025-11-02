@@ -20,10 +20,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Infrastructure destroyed successfully!"
+            echo "Infrastructure destroyed successfully!"
         }
         failure {
-            echo "❌ Destroy operation failed!"
+            echo "Destroy operation failed!"
         }
     }
 }
