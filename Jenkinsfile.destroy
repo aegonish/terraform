@@ -1,0 +1,242 @@
+pipeline {
+    agent any
+    environment {
+        AWS_REGION = "ap-south-1"
+        AWS_DEFAULT_REGION = "ap-south-1"
+    }
+
+    stages {
+        stage('Terraform Init') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-jenkins-creds',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    bat "terraform init -upgrade"
+                }
+            }
+        }
+
+        stage('Destroy Kubernetes Resources') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="kubernetes_secret.ecr_pull_secret" -auto-approve
+                    terraform destroy -target="kubernetes_namespace.aegonish" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy EBS CSI Driver Addon') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="aws_eks_addon.ebs_csi_driver" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy IAM Role Policy Attachment') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="aws_iam_role_policy_attachment.ebs_csi_attach" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy EBS CSI IRSA Role') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="aws_iam_role.ebs_csi_irsa" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy OIDC Provider') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="aws_iam_openid_connect_provider.eks" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy Secrets Manager') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="aws_secretsmanager_secret_version.app_secrets_version" -auto-approve
+                    terraform destroy -target="aws_secretsmanager_secret.app_secrets" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy ECR Module') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="module.ecr" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy EKS Module') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="module.eks" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy IAM Module') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="module.iam" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Destroy VPC Module') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -target="module.vpc" -auto-approve
+                    """
+                }
+            }
+        }
+
+        stage('Final Cleanup') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ],
+                    file(credentialsId: 'terraform-app-secrets', variable: 'SECRETS_FILE')
+                ]) {
+                    bat """
+                    copy %SECRETS_FILE% secrets.auto.tfvars
+                    terraform destroy -auto-approve
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "EKS Cluster destroyed successfully!"
+        }
+        failure {
+            echo "EKS Cluster destroy failed!"
+        }
+    }
+}
