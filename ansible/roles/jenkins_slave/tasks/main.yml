@@ -3,7 +3,7 @@
 # Jenkins Slave: Install & Connect Agent
 # ========================================
 
-- name: Install Java, Docker, Git, AWS CLI on slave (raw)
+- name: Install Java, Docker, Git, AWS CLI on slave
   raw: |
     set -eux
     yum install -y java-17-amazon-corretto git docker awscli || \
@@ -13,7 +13,7 @@
   delegate_to: "{{ jenkins_slave_ip }}"
   become: yes
 
-
+# ✅ Ensure Docker is running
 - name: Enable & start Docker on slave
   become: yes
   ansible.builtin.service:
@@ -21,6 +21,39 @@
     state: started
     enabled: yes
   delegate_to: "{{ jenkins_slave_ip }}"
+
+# ✅ FIX: Allow ec2-user to run Docker (needed for Jenkins builds)
+- name: Add ec2-user to docker group
+  become: yes
+  ansible.builtin.user:
+    name: ec2-user
+    groups: docker
+    append: yes
+  delegate_to: "{{ jenkins_slave_ip }}"
+
+# ✅ Restart Docker so group membership is applied
+- name: Restart Docker after adding ec2-user
+  become: yes
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+  delegate_to: "{{ jenkins_slave_ip }}"
+
+# ✅ Check that ec2-user can run Docker (debug output)
+- name: Test Docker access for ec2-user
+  become: yes
+  become_user: ec2-user
+  ansible.builtin.command: docker ps
+  register: docker_access_check
+  failed_when: docker_access_check.rc != 0
+  delegate_to: "{{ jenkins_slave_ip }}"
+
+- debug:
+    msg: "Docker access validated for ec2-user ✅"
+
+# ========================================
+# Jenkins Agent Setup
+# ========================================
 
 - name: Create Jenkins agent directory on slave
   become: yes
@@ -40,7 +73,7 @@
     mode: '0755'
   delegate_to: "{{ jenkins_slave_ip }}"
 
-# ✅ Create Jenkins node configuration
+# ✅ Register node in Jenkins master dynamically
 - name: Create Jenkins slave node via Script API
   ansible.builtin.uri:
     url: "http://{{ jenkins_master_ip }}:8080/scriptText"
@@ -55,11 +88,10 @@
   changed_when: slave_create_output.status == 200
   failed_when: slave_create_output.status not in [200,201]
 
-- name: "Debug: Jenkins slave registration result"
-  debug:
+- debug:
     msg: "{{ slave_create_output.content | default('no response') }}"
 
-# ✅ Create systemd service for JNLP auto-connect
+# ✅ Auto-connect service (JNLP)
 - name: Install Jenkins agent systemd service
   become: yes
   ansible.builtin.template:
@@ -76,6 +108,6 @@
     daemon_reload: yes
   delegate_to: "{{ jenkins_slave_ip }}"
 
-- name: "✅ Slave setup completed!"
+- name: 🎯 Slave setup completed!
   debug:
-    msg: "🎯 Jenkins slave successfully registered & connected!"
+    msg: "✅ Jenkins slave successfully registered & ready for CI builds!"
