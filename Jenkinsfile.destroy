@@ -148,11 +148,12 @@ pipeline {
                 ]) {
                     bat """
                     echo Deleting ALL images in ECR...
-                    for /f "tokens=*" %%i in ('aws ecr list-images --repository-name aegonish-eks-cluster-repo --region ap-south-1 --query "imageIds[*]" --output text') do (
+
+                    for /f %%i in ('aws ecr list-images --repository-name aegonish-eks-cluster-repo --region ap-south-1 --query "imageIds[*].imageDigest" --output text') do (
                         aws ecr batch-delete-image ^
                             --region ap-south-1 ^
                             --repository-name aegonish-eks-cluster-repo ^
-                            --image-ids %%i || echo No images to delete
+                            --image-ids imageDigest=%%i || echo Failed to delete %%i
                     )
 
                     echo Running Terraform destroy on ECR module...
@@ -162,6 +163,7 @@ pipeline {
                 }
             }
         }
+
 
 
         stage('Destroy EKS Module') {
