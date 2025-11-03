@@ -55,7 +55,7 @@ variable "node_instance_type" {
 variable "node_desired_capacity" {
   description = "Desired worker node count"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "node_min_size" {
@@ -67,7 +67,7 @@ variable "node_min_size" {
 variable "node_max_size" {
   description = "Maximum worker node count"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "tags" {
