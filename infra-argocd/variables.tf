@@ -7,6 +7,7 @@ variable "aws_region" {
 variable "cluster_name" {
   description = "EKS cluster name to deploy ArgoCD onto"
   type        = string
+  default     = "aegonish-eks-cluster"
 }
 
 variable "argocd_common_name" {
