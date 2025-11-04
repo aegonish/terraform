@@ -15,7 +15,7 @@ pipeline {
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
-                        bat "terraform init -force-copy -upgrade"
+                        bat 'terraform init -force-copy -upgrade'
                     }
                 }
             }
@@ -24,7 +24,7 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 dir('infra-argocd') {
-                    bat "terraform validate"
+                    bat 'terraform validate'
                 }
             }
         }
@@ -38,7 +38,7 @@ pipeline {
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
-                        bat 'terraform plan -var "vpc_id=%VPC_ID%"'
+                        bat 'terraform plan -out=tfplan'
                     }
                 }
             }
@@ -53,10 +53,7 @@ pipeline {
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
-                        bat '''
-                        aws eks update-kubeconfig --region ap-south-1 --name aegonish-eks-cluster
-                        terraform apply -auto-approve -var "cluster_name=aegonish-eks-cluster" -var "vpc_id=%VPC_ID%"
-                        '''
+                        bat 'terraform apply -auto-approve tfplan'
                     }
                 }
             }
@@ -65,10 +62,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ ArgoCD infrastructure deployed successfully!"
+            echo 'ArgoCD Infra deployed successfully!'
         }
         failure {
-            echo "❌ Terraform failed for ArgoCD infra!"
+            echo 'Terraform failed for ArgoCD Infra!'
         }
     }
 }

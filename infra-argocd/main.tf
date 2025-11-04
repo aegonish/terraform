@@ -1,6 +1,7 @@
 #########################################
-# Terraform & Providers
+# Terraform Backend & Providers
 #########################################
+
 terraform {
   required_version = ">= 1.5.0"
 
@@ -27,10 +28,6 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
     http = {
       source  = "hashicorp/http"
       version = "~> 3.0"
@@ -43,19 +40,9 @@ provider "aws" {
 }
 
 #########################################
-# Data Sources
+# EKS Cluster Data
 #########################################
 
-# Get public IP of Jenkins runner (for SG restriction)
-data "http" "my_ip" {
-  url = "https://checkip.amazonaws.com"
-}
-
-locals {
-  my_ip_cidr = var.my_ip_cidr != "" ? var.my_ip_cidr : "${trimspace(data.http.my_ip.body)}/32"
-}
-
-# Get existing EKS cluster info
 data "aws_eks_cluster" "eks" {
   name = var.cluster_name
 }
@@ -65,13 +52,18 @@ data "aws_eks_cluster_auth" "eks" {
 }
 
 #########################################
-# Kubernetes & Helm Providers
+# Kubernetes Provider
 #########################################
+
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.eks.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks.certificate_authority[0].data)
   token                  = data.aws_eks_cluster_auth.eks.token
 }
+
+#########################################
+# Helm Provider (for ArgoCD)
+#########################################
 
 provider "helm" {
   kubernetes {
@@ -82,42 +74,9 @@ provider "helm" {
 }
 
 #########################################
-# ArgoCD Namespace
+# TLS Certificate (Self-Signed)
 #########################################
-resource "kubernetes_namespace" "argocd" {
-  metadata {
-    name = var.namespace
-  }
-}
 
-#########################################
-# Security Group for ArgoCD LoadBalancer
-#########################################
-resource "aws_security_group" "argocd_alb_sg" {
-  name        = "${var.cluster_name}-argocd-sg"
-  description = "Security group for ArgoCD ALB"
-  vpc_id      = var.vpc_id
-  tags        = var.tags
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = [local.my_ip_cidr]
-    description = "Allow HTTPS from developer IP"
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-#########################################
-# TLS (Self-Signed)
-#########################################
 resource "tls_private_key" "argocd" {
   algorithm = "RSA"
   rsa_bits  = 2048
@@ -126,106 +85,108 @@ resource "tls_private_key" "argocd" {
 resource "tls_self_signed_cert" "argocd" {
   subject {
     common_name  = var.argocd_common_name != "" ? var.argocd_common_name : data.aws_eks_cluster.eks.endpoint
-    organization = ["aegonish"]
+    organization = "aegonish"
   }
 
   validity_period_hours = 8760
   is_ca_certificate     = false
   private_key_pem       = tls_private_key.argocd.private_key_pem
+
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth"
+  ]
 }
 
-resource "kubernetes_secret" "argocd_tls" {
+#########################################
+# Detect Public IP for Access (Optional)
+#########################################
+
+data "http" "my_ip" {
+  url = "https://checkip.amazonaws.com/"
+}
+
+locals {
+  my_ip_cidr = var.my_ip_cidr != "" ? var.my_ip_cidr : "${trimspace(data.http.my_ip.response_body)}/32"
+}
+
+#########################################
+# ArgoCD Namespace
+#########################################
+
+resource "kubernetes_namespace" "argocd" {
   metadata {
-    name      = "argocd-server-tls"
-    namespace = var.namespace
+    name = "argocd"
+  }
+}
+
+#########################################
+# ArgoCD via Helm Chart
+#########################################
+
+resource "helm_release" "argocd" {
+  name       = "argocd"
+  namespace  = kubernetes_namespace.argocd.metadata[0].name
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-cd"
+  version    = "7.5.2"
+
+  set {
+    name  = "server.service.type"
+    value = "LoadBalancer"
   }
 
-  data = {
-    "tls.crt" = base64encode(tls_self_signed_cert.argocd.cert_pem)
-    "tls.key" = base64encode(tls_private_key.argocd.private_key_pem)
+  set {
+    name  = "server.ingress.enabled"
+    value = "false"
   }
 
-  type = "kubernetes.io/tls"
+  set {
+    name  = "configs.params.server.insecure"
+    value = "true"
+  }
+
+  set {
+    name  = "server.extraArgs"
+    value = "{--insecure}"
+  }
+
   depends_on = [kubernetes_namespace.argocd]
 }
 
 #########################################
-# ArgoCD Admin Credentials
+# AWS Secrets Manager for Admin Password
 #########################################
-resource "random_password" "admin" {
-  length  = 20
-  special = true
-}
 
-resource "aws_secretsmanager_secret" "argocd_admin" {
-  name        = "${var.cluster_name}-argocd-admin"
-  description = "ArgoCD admin credentials"
-  tags        = var.tags
-}
-
-resource "aws_secretsmanager_secret_version" "argocd_admin_ver" {
-  secret_id     = aws_secretsmanager_secret.argocd_admin.id
-  secret_string = jsonencode({
-    username = "admin"
-    password = random_password.admin.result
-  })
-}
-
-#########################################
-# Helm Install: ArgoCD
-#########################################
-resource "helm_release" "argocd" {
-  name       = "argocd"
-  namespace  = var.namespace
-  repository = "https://argoproj.github.io/argo-helm"
-  chart      = "argo-cd"
-  version    = var.argo_chart_version
-
-  values = [
-    <<EOF
-server:
-  service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-      service.beta.kubernetes.io/aws-load-balancer-security-groups: "${aws_security_group.argocd_alb_sg.id}"
-  extraArgs:
-    - --insecure
-    - --staticassets
-dex:
-  enabled: true
-redis:
-  enabled: true
-EOF
-  ]
-
-  set {
-    name  = "configs.secret.argocdServerAdminPassword"
-    value = random_password.admin.result
+data "kubernetes_secret" "argocd_admin" {
+  metadata {
+    name      = "argocd-initial-admin-secret"
+    namespace = kubernetes_namespace.argocd.metadata[0].name
   }
+  depends_on = [helm_release.argocd]
+}
 
-  depends_on = [
-    kubernetes_namespace.argocd,
-    kubernetes_secret.argocd_tls
-  ]
+resource "aws_secretsmanager_secret" "argocd_admin_secret" {
+  name        = "argocd-admin-password"
+  description = "ArgoCD admin password stored securely"
+}
+
+resource "aws_secretsmanager_secret_version" "argocd_admin_secret_version" {
+  secret_id     = aws_secretsmanager_secret.argocd_admin_secret.id
+  secret_string = base64decode(data.kubernetes_secret.argocd_admin.data["password"])
 }
 
 #########################################
 # Outputs
 #########################################
-data "kubernetes_service" "argocd_server" {
-  metadata {
-    name      = "argocd-server"
-    namespace = var.namespace
-  }
 
-  depends_on = [helm_release.argocd]
-}
-
-output "argocd_endpoint" {
-  value = try(data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname, "")
+output "argocd_server_url" {
+  description = "ArgoCD external endpoint (LoadBalancer)"
+  value       = try(kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname, "pending")
 }
 
 output "argocd_admin_secret_arn" {
-  value = aws_secretsmanager_secret.argocd_admin.arn
+  description = "ARN of the secret storing ArgoCD admin password"
+  value       = aws_secretsmanager_secret.argocd_admin_secret.arn
 }

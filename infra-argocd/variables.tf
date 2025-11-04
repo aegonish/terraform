@@ -1,48 +1,22 @@
 variable "aws_region" {
-  type    = string
-  default = "ap-south-1"
+  description = "AWS region"
+  type        = string
+  default     = "ap-south-1"
 }
 
 variable "cluster_name" {
-  description = "Existing EKS cluster name"
-  type        = string
-  default     = "aegonish-eks-cluster"
-}
-
-variable "vpc_id" {
-  description = "VPC ID where ALB SG will be created"
+  description = "EKS cluster name to deploy ArgoCD onto"
   type        = string
 }
 
-variable "namespace" {
-  description = "Namespace for ArgoCD"
-  type        = string
-  default     = "argocd"
-}
-
-variable "my_ip_cidr" {
-  description = "CIDR for allowed access (optional override)"
+variable "argocd_common_name" {
+  description = "Common name for ArgoCD self-signed TLS certificate"
   type        = string
   default     = ""
 }
 
-variable "argocd_common_name" {
-  description = "Common name for self-signed TLS cert"
+variable "my_ip_cidr" {
+  description = "Optional: CIDR for your own IP to access ArgoCD externally"
   type        = string
-  default     = "argocd.local"
-}
-
-variable "argo_chart_version" {
-  description = "Helm chart version"
-  type        = string
-  default     = "5.51.6"
-}
-
-variable "tags" {
-  type = map(string)
-  default = {
-    Environment = "dev"
-    Project     = "aegonish"
-    ManagedBy   = "terraform"
-  }
+  default     = ""
 }
