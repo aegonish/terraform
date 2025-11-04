@@ -174,7 +174,7 @@ resource "aws_secretsmanager_secret" "argocd_admin_secret" {
 
 resource "aws_secretsmanager_secret_version" "argocd_admin_secret_version" {
   secret_id     = aws_secretsmanager_secret.argocd_admin_secret.id
-  secret_string = base64decode(data.kubernetes_secret.argocd_admin.data["password"])
+  secret_string = data.kubernetes_secret.argocd_admin.data["password"]
 }
 
 #########################################
