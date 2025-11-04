@@ -178,12 +178,24 @@ resource "aws_secretsmanager_secret_version" "argocd_admin_secret_version" {
 }
 
 #########################################
+# Get ArgoCD LoadBalancer Service
+#########################################
+
+data "kubernetes_service" "argocd_server" {
+  metadata {
+    name      = "argocd-server"
+    namespace = "argocd"
+  }
+  depends_on = [helm_release.argocd]
+}
+
+#########################################
 # Outputs
 #########################################
 
 output "argocd_server_url" {
   description = "ArgoCD external endpoint (LoadBalancer)"
-  value       = try(kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname, "pending")
+  value       = try(data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname, "pending")
 }
 
 output "argocd_admin_secret_arn" {
