@@ -75,14 +75,24 @@ terraform apply -auto-approve -var-file=secrets.auto.tfvars
 
 stage('Set gp2 as Default StorageClass') {
     steps {
+        dir('infra-argocd') {
+                    withCredentials([
+                        [$class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'],
+                        usernamePassword(credentialsId: 'github-pat', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')
+                    ])
+          {
         bat '''
 echo Setting gp2 StorageClass as default...
 powershell "$json = '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'; kubectl patch storageclass gp2 --type merge -p $json"
 echo gp2 StorageClass set as default successfully!
 '''
+          }
+        }  
     }
 }
-
 
     }
 
