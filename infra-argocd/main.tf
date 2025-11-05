@@ -52,7 +52,7 @@ data "aws_eks_cluster_auth" "eks" {
 }
 
 #########################################
-# Kubernetes Provider
+# Kubernetes & Helm Providers
 #########################################
 
 provider "kubernetes" {
@@ -60,10 +60,6 @@ provider "kubernetes" {
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.eks.certificate_authority[0].data)
   token                  = data.aws_eks_cluster_auth.eks.token
 }
-
-#########################################
-# Helm Provider (for ArgoCD)
-#########################################
 
 provider "helm" {
   kubernetes {
@@ -100,7 +96,7 @@ resource "tls_self_signed_cert" "argocd" {
 }
 
 #########################################
-# Detect Public IP for Access (Optional)
+# Detect Public IP (Optional)
 #########################################
 
 data "http" "my_ip" {
@@ -156,12 +152,12 @@ resource "helm_release" "argocd" {
 }
 
 #########################################
-# AWS Secrets Manager for Admin Password
+# AWS Secrets Manager for ArgoCD Admin Password
 #########################################
 
 locals {
-  timestamp_suffix        = formatdate("YYYYMMDDHHmmss", timestamp())
-  dynamic_argocd_secret   = "argocd-admin-password-${local.timestamp_suffix}"
+  timestamp_suffix      = formatdate("YYYYMMDDHHmmss", timestamp())
+  dynamic_argocd_secret = "argocd-admin-password-${local.timestamp_suffix}"
 }
 
 data "kubernetes_secret" "argocd_admin" {
@@ -183,14 +179,13 @@ resource "aws_secretsmanager_secret" "argocd_admin_secret" {
   }
 }
 
-
 resource "aws_secretsmanager_secret_version" "argocd_admin_secret_version" {
   secret_id     = aws_secretsmanager_secret.argocd_admin_secret.id
   secret_string = data.kubernetes_secret.argocd_admin.data["password"]
 }
 
 #########################################
-# Get ArgoCD LoadBalancer Service
+# Get ArgoCD LoadBalancer Endpoint
 #########################################
 
 data "kubernetes_service" "argocd_server" {
@@ -215,12 +210,6 @@ output "argocd_admin_secret_arn" {
   value       = aws_secretsmanager_secret.argocd_admin_secret.arn
 }
 
-
-#########################################
-# Make gp2 Default StorageClass
-#########################################
-
-
 #########################################
 # ArgoCD Git Repository Credentials
 #########################################
@@ -241,7 +230,7 @@ variable "git_repo_token" {
   type        = string
   sensitive   = true
   default     = ""
-  description = "GitHub personal access token or password for ArgoCD"
+  description = "GitHub personal access token for ArgoCD"
 }
 
 resource "kubernetes_secret" "argocd_repo_creds" {
@@ -263,10 +252,8 @@ resource "kubernetes_secret" "argocd_repo_creds" {
   depends_on = [helm_release.argocd]
 }
 
-
-
 #########################################
-# ArgoCD Bootstrap Application (GitOps)
+# ArgoCD Bootstrap (GitOps)
 #########################################
 
 resource "null_resource" "apply_argocd_bootstrap" {
@@ -290,10 +277,104 @@ EOT
   ]
 }
 
-
 output "argocd_summary" {
   value = {
-    argocd_url   = data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname
-    secret_name  = aws_secretsmanager_secret.argocd_admin_secret.name
+    argocd_url  = data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname
+    secret_name = aws_secretsmanager_secret.argocd_admin_secret.name
   }
+}
+
+#########################################
+# AWS Load Balancer Controller (ALB + IRSA)
+#########################################
+
+data "tls_certificate" "eks_oidc" {
+  url = data.aws_eks_cluster.eks.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+  url             = data.aws_eks_cluster.eks.identity[0].oidc[0].issuer
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.eks_oidc.certificates[0].sha1_fingerprint]
+}
+
+resource "aws_iam_policy" "aws_load_balancer_controller" {
+  name = "AWSLoadBalancerControllerIAMPolicy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:*",
+          "ec2:Describe*",
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupIngress",
+          "iam:CreateServiceLinkedRole",
+          "cognito-idp:DescribeUserPoolClient"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+data "aws_iam_policy_document" "alb_irsa_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.id]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
+    }
+  }
+}
+
+resource "aws_iam_role" "aws_load_balancer_controller" {
+  name               = "AmazonEKSLoadBalancerControllerRole"
+  assume_role_policy = data.aws_iam_policy_document.alb_irsa_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "alb_controller_attach" {
+  role       = aws_iam_role.aws_load_balancer_controller.name
+  policy_arn = aws_iam_policy.aws_load_balancer_controller.arn
+}
+
+resource "kubernetes_service_account" "alb_controller_sa" {
+  metadata {
+    name      = "aws-load-balancer-controller"
+    namespace = "kube-system"
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_load_balancer_controller.arn
+    }
+  }
+}
+
+resource "helm_release" "aws_load_balancer_controller" {
+  name       = "aws-load-balancer-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  namespace  = "kube-system"
+
+  values = [
+    yamlencode({
+      clusterName = var.cluster_name
+      region      = var.aws_region
+      vpcId       = data.aws_eks_cluster.eks.vpc_config[0].vpc_id
+      serviceAccount = {
+        create = false
+        name   = kubernetes_service_account.alb_controller_sa.metadata[0].name
+      }
+    })
+  ]
+
+  depends_on = [
+    aws_iam_role_policy_attachment.alb_controller_attach,
+    kubernetes_service_account.alb_controller_sa
+  ]
 }
