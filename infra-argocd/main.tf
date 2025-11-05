@@ -285,17 +285,16 @@ output "argocd_summary" {
 }
 
 #########################################
-# AWS Load Balancer Controller (ALB + IRSA)
+# AWS Load Balancer Controller (Dynamic IRSA)
 #########################################
 
 data "tls_certificate" "eks_oidc" {
   url = data.aws_eks_cluster.eks.identity[0].oidc[0].issuer
 }
 
-resource "aws_iam_openid_connect_provider" "eks" {
-  url             = data.aws_eks_cluster.eks.identity[0].oidc[0].issuer
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks_oidc.certificates[0].sha1_fingerprint]
+# Use dynamic data source (not a resource)
+data "aws_iam_openid_connect_provider" "eks" {
+  arn = "arn:aws:iam::${data.aws_eks_cluster.eks.arn_account_id}:oidc-provider/${replace(data.aws_eks_cluster.eks.identity[0].oidc[0].issuer, "https://", "")}"
 }
 
 resource "aws_iam_policy" "aws_load_balancer_controller" {
@@ -325,11 +324,11 @@ data "aws_iam_policy_document" "alb_irsa_assume_role" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.id]
+      identifiers = [data.aws_iam_openid_connect_provider.eks.arn]
     }
     condition {
       test     = "StringEquals"
-      variable = "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub"
+      variable = "${replace(data.aws_eks_cluster.eks.identity[0].oidc[0].issuer, "https://", "")}:sub"
       values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
     }
   }
