@@ -303,24 +303,9 @@ data "aws_iam_openid_connect_provider" "eks" {
 resource "aws_iam_policy" "aws_load_balancer_controller" {
   name = "AWSLoadBalancerControllerIAMPolicy"
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:*",
-          "ec2:Describe*",
-          "ec2:AuthorizeSecurityGroupIngress",
-          "ec2:RevokeSecurityGroupIngress",
-          "iam:CreateServiceLinkedRole",
-          "cognito-idp:DescribeUserPoolClient"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
+  policy = file("${path.module}/iam_policies/aws-load-balancer-controller-policy.json")
 }
+
 
 data "aws_iam_policy_document" "alb_irsa_assume_role" {
   statement {
