@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+    environment {
+        AWS_REGION = "ap-south-1"
+        AWS_DEFAULT_REGION = "ap-south-1"
+    }
+
+    stages {
+        stage('Terraform Init') {
+            steps {
+                dir('infra-argocd') {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        bat 'terraform init -force-copy -upgrade'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                dir('infra-argocd') {
+                    bat 'terraform validate'
+                }
+            }
+        }
+
+        stage('Terraform Plan Destroy') {
+            steps {
+                dir('infra-argocd') {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        bat 'terraform plan -destroy -out=tfplan'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Destroy') {
+            steps {
+                dir('infra-argocd') {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-jenkins-creds',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        bat 'terraform apply -auto-approve tfplan'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'ArgoCD Infra destroyed successfully!'
+        }
+        failure {
+            echo 'Terraform destroy failed for ArgoCD Infra!'
+        }
+    }
+}
