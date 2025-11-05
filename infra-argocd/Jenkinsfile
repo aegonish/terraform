@@ -39,10 +39,11 @@ pipeline {
                         credentialsId: 'aws-jenkins-creds',
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'],
-                        string(credentialsId: 'github-pat', variable: 'GIT_TOKEN')  // your GitHub token secret
+                        usernamePassword(credentialsId: 'github-pat', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')
                     ]) {
                         bat '''
-echo git_repo_token = "%GIT_TOKEN%" > secrets.auto.tfvars
+echo git_repo_username = "%GIT_USER%" > secrets.auto.tfvars
+echo git_repo_token = "%GIT_TOKEN%" >> secrets.auto.tfvars
 echo cluster_name = "%CLUSTER_NAME%" >> secrets.auto.tfvars
 terraform plan -out=tfplan -var-file=secrets.auto.tfvars
 '''
@@ -59,10 +60,11 @@ terraform plan -out=tfplan -var-file=secrets.auto.tfvars
                         credentialsId: 'aws-jenkins-creds',
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'],
-                        string(credentialsId: 'github-pat', variable: 'GIT_TOKEN')
+                        usernamePassword(credentialsId: 'github-pat', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')
                     ]) {
                         bat '''
-echo git_repo_token = "%GIT_TOKEN%" > secrets.auto.tfvars
+echo git_repo_username = "%GIT_USER%" > secrets.auto.tfvars
+echo git_repo_token = "%GIT_TOKEN%" >> secrets.auto.tfvars
 echo cluster_name = "%CLUSTER_NAME%" >> secrets.auto.tfvars
 terraform apply -auto-approve -var-file=secrets.auto.tfvars
 '''
@@ -74,10 +76,10 @@ terraform apply -auto-approve -var-file=secrets.auto.tfvars
 
     post {
         success {
-            echo '✅ ArgoCD Infra deployed successfully!'
+            echo 'ArgoCD Infra deployed successfully!'
         }
         failure {
-            echo '❌ Terraform failed for ArgoCD Infra!'
+            echo 'Terraform failed for ArgoCD Infra!'
         }
     }
 }
