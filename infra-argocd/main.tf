@@ -260,15 +260,16 @@ resource "kubernetes_secret" "argocd_repo_creds" {
     }
   }
 
-  string_data = {
-    url      = var.git_repo_url
-    username = var.git_repo_username
-    password = var.git_repo_token
+  data = {
+    url      = base64encode(var.git_repo_url)
+    username = base64encode(var.git_repo_username)
+    password = base64encode(var.git_repo_token)
   }
 
   type       = "Opaque"
   depends_on = [helm_release.argocd]
 }
+
 
 
 #########################################
