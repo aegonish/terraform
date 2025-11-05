@@ -159,6 +159,11 @@ resource "helm_release" "argocd" {
 # AWS Secrets Manager for Admin Password
 #########################################
 
+locals {
+  timestamp_suffix        = formatdate("YYYYMMDDHHmmss", timestamp())
+  dynamic_argocd_secret   = "argocd-admin-password-${local.timestamp_suffix}"
+}
+
 data "kubernetes_secret" "argocd_admin" {
   metadata {
     name      = "argocd-initial-admin-secret"
@@ -168,9 +173,16 @@ data "kubernetes_secret" "argocd_admin" {
 }
 
 resource "aws_secretsmanager_secret" "argocd_admin_secret" {
-  name        = "argocd-admin-password"
-  description = "ArgoCD admin password stored securely"
+  name        = local.dynamic_argocd_secret
+  description = "Dynamic ArgoCD admin password secret created at ${local.timestamp_suffix}"
+
+  recovery_window_in_days = 0
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
+
 
 resource "aws_secretsmanager_secret_version" "argocd_admin_secret_version" {
   secret_id     = aws_secretsmanager_secret.argocd_admin_secret.id
@@ -214,16 +226,10 @@ resource "null_resource" "make_gp2_default" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["PowerShell", "-Command"]
-    command = <<EOT
-try {
-  kubectl patch storageclass gp2 --type merge -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
-} catch {
-  kubectl annotate storageclass gp2 storageclass.kubernetes.io/is-default-class="true" --overwrite
-}
-EOT
+    command = <<-EOT
+      PowerShell -Command "$json = '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'; kubectl patch storageclass gp2 --type merge -p $json"
+    EOT
   }
-
   depends_on = [helm_release.argocd]
 }
 
@@ -296,4 +302,12 @@ EOT
     kubernetes_secret.argocd_repo_creds,
     null_resource.make_gp2_default
   ]
+}
+
+
+output "argocd_summary" {
+  value = {
+    argocd_url   = data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname
+    secret_name  = aws_secretsmanager_secret.argocd_admin_secret.name
+  }
 }
