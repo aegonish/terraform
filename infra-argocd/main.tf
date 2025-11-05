@@ -225,20 +225,15 @@ resource "null_resource" "make_gp2_default" {
     cluster = var.cluster_name
   }
 
-  provisioner "local-exec" {
-    command = <<-EOT
-      PowerShell -Command "
-        try {
-          $json = '{""metadata"":{""annotations"":{""storageclass.kubernetes.io/is-default-class"":""true""}}}'
-          kubectl patch storageclass gp2 --type merge -p $json
-          Write-Host 'gp2 StorageClass set as default successfully.'
-        } catch {
-          Write-Host 'StorageClass patch already applied or failed safely.'
-        }
-      "
-    EOT
-  }
-  
+provisioner "local-exec" {
+  command = <<-EOT
+    powershell -ExecutionPolicy Bypass -Command "$json = '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'"
+    powershell -ExecutionPolicy Bypass -Command "kubectl patch storageclass gp2 --type merge -p $json"
+  EOT
+  interpreter = ["cmd", "/C"]
+}
+
+
   depends_on = [helm_release.argocd]
 }
 
