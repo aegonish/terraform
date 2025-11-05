@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: aegonish-blog
+  namespace: argocd
+spec:
+  description: Project for aegonish-blog apps
+  destinations:
+    - namespace: aegonish
+      server: https://kubernetes.default.svc
+  sourceRepos:
+    - 'https://github.com/aegonish/terraform'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'

@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aegonish-blog
+  namespace: argocd
+spec:
+  project: aegonish-blog
+  source:
+    repoURL: 'https://github.com/aegonish/terraform'
+    targetRevision: main
+    path: helm
+    helm:
+      valueFiles:
+        - values-backend.yaml
+        - values-mongo.yaml
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: aegonish
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

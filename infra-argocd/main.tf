@@ -202,3 +202,97 @@ output "argocd_admin_secret_arn" {
   description = "ARN of the secret storing ArgoCD admin password"
   value       = aws_secretsmanager_secret.argocd_admin_secret.arn
 }
+
+
+#########################################
+# Make gp2 Default StorageClass
+#########################################
+
+resource "null_resource" "make_gp2_default" {
+  triggers = {
+    cluster = var.cluster_name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command = <<EOT
+try {
+  kubectl patch storageclass gp2 --type merge -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+} catch {
+  kubectl annotate storageclass gp2 storageclass.kubernetes.io/is-default-class="true" --overwrite
+}
+EOT
+  }
+
+  depends_on = [helm_release.argocd]
+}
+
+
+#########################################
+# ArgoCD Git Repository Credentials
+#########################################
+
+variable "git_repo_url" {
+  type        = string
+  default     = "https://github.com/aegonish/terraform"
+  description = "Git repo ArgoCD will sync from"
+}
+
+variable "git_repo_username" {
+  type        = string
+  default     = ""
+  description = "Git username (optional if using token auth)"
+}
+
+variable "git_repo_token" {
+  type        = string
+  sensitive   = true
+  default     = ""
+  description = "GitHub personal access token or password for ArgoCD"
+}
+
+resource "kubernetes_secret" "argocd_repo_creds" {
+  metadata {
+    name      = "argocd-repo-creds"
+    namespace = kubernetes_namespace.argocd.metadata[0].name
+    labels = {
+      "argocd.argoproj.io/secret-type" = "repository"
+    }
+  }
+
+  string_data = {
+    url      = var.git_repo_url
+    username = var.git_repo_username
+    password = var.git_repo_token
+  }
+
+  type       = "Opaque"
+  depends_on = [helm_release.argocd]
+}
+
+
+#########################################
+# ArgoCD Bootstrap Application (GitOps)
+#########################################
+
+resource "null_resource" "apply_argocd_bootstrap" {
+  triggers = {
+    cluster = var.cluster_name
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command = <<EOT
+Write-Host "Waiting for argocd-server to become available..."
+kubectl -n argocd wait --for=condition=available deployment/argocd-server --timeout=300s
+Write-Host "Applying ArgoCD bootstrap Application..."
+kubectl apply -f gitops/argocd/argocd-bootstrap-application.yaml
+EOT
+  }
+
+  depends_on = [
+    helm_release.argocd,
+    kubernetes_secret.argocd_repo_creds,
+    null_resource.make_gp2_default
+  ]
+}

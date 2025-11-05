@@ -3,18 +3,20 @@ pipeline {
     environment {
         AWS_REGION = "ap-south-1"
         AWS_DEFAULT_REGION = "ap-south-1"
+        CLUSTER_NAME = "aegonish-eks-cluster"
     }
 
     stages {
+
         stage('Terraform Init') {
             steps {
                 dir('infra-argocd') {
-                    withCredentials([[ 
-                        $class: 'AmazonWebServicesCredentialsBinding',
+                    withCredentials([
+                        [$class: 'AmazonWebServicesCredentialsBinding',
                         credentialsId: 'aws-jenkins-creds',
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]]) {
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
+                    ]) {
                         bat 'terraform init -force-copy -upgrade'
                     }
                 }
@@ -32,13 +34,18 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 dir('infra-argocd') {
-                    withCredentials([[ 
-                        $class: 'AmazonWebServicesCredentialsBinding',
+                    withCredentials([
+                        [$class: 'AmazonWebServicesCredentialsBinding',
                         credentialsId: 'aws-jenkins-creds',
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]]) {
-                        bat 'terraform plan -out=tfplan'
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'],
+                        string(credentialsId: 'github-pat', variable: 'GIT_TOKEN')  // your GitHub token secret
+                    ]) {
+                        bat '''
+echo git_repo_token = "%GIT_TOKEN%" > secrets.auto.tfvars
+echo cluster_name = "%CLUSTER_NAME%" >> secrets.auto.tfvars
+terraform plan -out=tfplan -var-file=secrets.auto.tfvars
+'''
                     }
                 }
             }
@@ -47,13 +54,18 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 dir('infra-argocd') {
-                    withCredentials([[ 
-                        $class: 'AmazonWebServicesCredentialsBinding',
+                    withCredentials([
+                        [$class: 'AmazonWebServicesCredentialsBinding',
                         credentialsId: 'aws-jenkins-creds',
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]]) {
-                        bat 'terraform apply -auto-approve tfplan'
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'],
+                        string(credentialsId: 'github-pat', variable: 'GIT_TOKEN')
+                    ]) {
+                        bat '''
+echo git_repo_token = "%GIT_TOKEN%" > secrets.auto.tfvars
+echo cluster_name = "%CLUSTER_NAME%" >> secrets.auto.tfvars
+terraform apply -auto-approve -var-file=secrets.auto.tfvars
+'''
                     }
                 }
             }
@@ -62,10 +74,10 @@ pipeline {
 
     post {
         success {
-            echo 'ArgoCD Infra deployed successfully!'
+            echo '✅ ArgoCD Infra deployed successfully!'
         }
         failure {
-            echo 'Terraform failed for ArgoCD Infra!'
+            echo '❌ Terraform failed for ArgoCD Infra!'
         }
     }
 }
