@@ -292,9 +292,12 @@ data "tls_certificate" "eks_oidc" {
   url = data.aws_eks_cluster.eks.identity[0].oidc[0].issuer
 }
 
-# Use dynamic data source (not a resource)
+# Get current AWS account ID dynamically
+data "aws_caller_identity" "current" {}
+
+# Reference the existing OIDC provider for the EKS cluster dynamically
 data "aws_iam_openid_connect_provider" "eks" {
-  arn = "arn:aws:iam::${data.aws_eks_cluster.eks.arn_account_id}:oidc-provider/${replace(data.aws_eks_cluster.eks.identity[0].oidc[0].issuer, "https://", "")}"
+  arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${replace(data.aws_eks_cluster.eks.identity[0].oidc[0].issuer, "https://", "")}"
 }
 
 resource "aws_iam_policy" "aws_load_balancer_controller" {
