@@ -220,24 +220,6 @@ output "argocd_admin_secret_arn" {
 # Make gp2 Default StorageClass
 #########################################
 
-resource "null_resource" "make_gp2_default" {
-  triggers = {
-    cluster = var.cluster_name
-  }
-
-provisioner "local-exec" {
-  command = <<-EOT
-    powershell -ExecutionPolicy Bypass -Command "$json = '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'"
-    powershell -ExecutionPolicy Bypass -Command "kubectl patch storageclass gp2 --type merge -p $json"
-  EOT
-  interpreter = ["cmd", "/C"]
-}
-
-
-  depends_on = [helm_release.argocd]
-}
-
-
 
 #########################################
 # ArgoCD Git Repository Credentials
