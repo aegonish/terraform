@@ -286,8 +286,7 @@ EOT
 
   depends_on = [
     helm_release.argocd,
-    kubernetes_secret.argocd_repo_creds,
-    null_resource.make_gp2_default
+    kubernetes_secret.argocd_repo_creds
   ]
 }
 
