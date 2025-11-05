@@ -77,12 +77,12 @@ stage('Set gp2 as Default StorageClass') {
     steps {
         bat '''
 echo Setting gp2 StorageClass as default...
-powershell "$json = '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'"
-powershell "kubectl patch storageclass gp2 --type merge -p $json"
+powershell "$json = '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"true\"}}}'; kubectl patch storageclass gp2 --type merge -p $json"
 echo gp2 StorageClass set as default successfully!
 '''
     }
 }
+
 
     }
 
