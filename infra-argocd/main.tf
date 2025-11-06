@@ -279,10 +279,11 @@ EOT
 
 output "argocd_summary" {
   value = {
-    argocd_url  = data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname
+    argocd_url  = try(data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname, "pending")
     secret_name = aws_secretsmanager_secret.argocd_admin_secret.name
   }
 }
+
 
 #########################################
 # AWS Load Balancer Controller (Dynamic IRSA)
