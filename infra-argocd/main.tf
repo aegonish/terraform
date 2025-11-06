@@ -128,6 +128,12 @@ resource "helm_release" "argocd" {
   chart      = "argo-cd"
   version    = "7.5.2"
 
+  # ✅ Key Fix — Make ArgoCD accessible via AWS ALB
+  set {
+    name  = "server.service.type"
+    value = "LoadBalancer"
+  }
+
   set {
     name  = "server.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme"
     value = "internet-facing"
@@ -210,80 +216,12 @@ output "argocd_admin_secret_arn" {
   value       = aws_secretsmanager_secret.argocd_admin_secret.arn
 }
 
-#########################################
-# ArgoCD Git Repository Credentials
-#########################################
-
-variable "git_repo_url" {
-  type        = string
-  default     = "https://github.com/aegonish/terraform"
-  description = "Git repo ArgoCD will sync from"
-}
-
-variable "git_repo_username" {
-  type        = string
-  default     = ""
-  description = "Git username (optional if using token auth)"
-}
-
-variable "git_repo_token" {
-  type        = string
-  sensitive   = true
-  default     = ""
-  description = "GitHub personal access token for ArgoCD"
-}
-
-resource "kubernetes_secret" "argocd_repo_creds" {
-  metadata {
-    name      = "argocd-repo-creds"
-    namespace = kubernetes_namespace.argocd.metadata[0].name
-    labels = {
-      "argocd.argoproj.io/secret-type" = "repository"
-    }
-  }
-
-  data = {
-    url      = base64encode(var.git_repo_url)
-    username = base64encode(var.git_repo_username)
-    password = base64encode(var.git_repo_token)
-  }
-
-  type       = "Opaque"
-  depends_on = [helm_release.argocd]
-}
-
-#########################################
-# ArgoCD Bootstrap (GitOps)
-#########################################
-
-resource "null_resource" "apply_argocd_bootstrap" {
-  triggers = {
-    cluster = var.cluster_name
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["PowerShell", "-Command"]
-    command = <<EOT
-Write-Host "Waiting for argocd-server to become available..."
-kubectl -n argocd wait --for=condition=available deployment/argocd-server --timeout=300s
-Write-Host "Applying ArgoCD bootstrap Application..."
-kubectl apply -f gitops/argocd/argocd-bootstrap-application.yaml
-EOT
-  }
-
-  depends_on = [
-    helm_release.argocd,
-    kubernetes_secret.argocd_repo_creds
-  ]
-}
-
 output "argocd_summary" {
   value = {
     argocd_url  = try(data.kubernetes_service.argocd_server.status[0].load_balancer[0].ingress[0].hostname, "pending")
     secret_name = aws_secretsmanager_secret.argocd_admin_secret.name
   }
 }
-
 
 #########################################
 # AWS Load Balancer Controller (Dynamic IRSA)
@@ -293,20 +231,16 @@ data "tls_certificate" "eks_oidc" {
   url = data.aws_eks_cluster.eks.identity[0].oidc[0].issuer
 }
 
-# Get current AWS account ID dynamically
 data "aws_caller_identity" "current" {}
 
-# Reference the existing OIDC provider for the EKS cluster dynamically
 data "aws_iam_openid_connect_provider" "eks" {
   arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${replace(data.aws_eks_cluster.eks.identity[0].oidc[0].issuer, "https://", "")}"
 }
 
 resource "aws_iam_policy" "aws_load_balancer_controller" {
-  name = "AWSLoadBalancerControllerIAMPolicy"
-
+  name   = "AWSLoadBalancerControllerIAMPolicy"
   policy = file("${path.module}/iam_policies/aws-load-balancer-controller-policy.json")
 }
-
 
 data "aws_iam_policy_document" "alb_irsa_assume_role" {
   statement {
