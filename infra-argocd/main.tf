@@ -307,8 +307,12 @@ resource "helm_release" "aws_load_balancer_controller" {
 #########################################
 
 # Fetch the latest version of your app secret
+data "aws_secretsmanager_secret" "app_secrets" {
+  name = "aegonish-eks-cluster-app-secrets"
+}
+
 data "aws_secretsmanager_secret_version" "app_secrets" {
-  secret_id = "aegonish-eks-cluster-app-secrets-20251106055732"
+  secret_id = data.aws_secretsmanager_secret.app_secrets.id
 }
 
 # Decode the JSON and create a Kubernetes secret from it
