@@ -311,7 +311,7 @@ data "aws_secretsmanager_secrets" "app_secrets" {}
 locals {
   matched_secret_arn = one([
     for s in data.aws_secretsmanager_secrets.app_secrets.arns :
-    s if contains(s, "aegonish-eks-cluster-app-secrets")
+    s if can(regex("aegonish-eks-cluster-app-secrets", s))
   ])
 }
 
@@ -322,6 +322,7 @@ data "aws_secretsmanager_secret" "app_secrets" {
 data "aws_secretsmanager_secret_version" "app_secrets" {
   secret_id = data.aws_secretsmanager_secret.app_secrets.id
 }
+#########################################
 
 
 # Decode the JSON and create a Kubernetes secret from it
