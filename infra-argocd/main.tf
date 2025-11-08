@@ -306,13 +306,24 @@ resource "helm_release" "aws_load_balancer_controller" {
 # Import App Secrets from AWS Secrets Manager
 #########################################
 
+data "aws_secretsmanager_secrets" "app_secrets" {}
+
+locals {
+  matched_secret_arn = one([
+    for s in data.aws_secretsmanager_secrets.app_secrets.arns :
+    s if contains(s, "aegonish-eks-cluster-app-secrets")
+  ])
+}
+
 data "aws_secretsmanager_secret" "app_secrets" {
-  name_prefix = "aegonish-eks-cluster-app-secrets"
+  arn = local.matched_secret_arn
 }
 
 data "aws_secretsmanager_secret_version" "app_secrets" {
   secret_id = data.aws_secretsmanager_secret.app_secrets.id
 }
+
+
 # Decode the JSON and create a Kubernetes secret from it
 resource "kubernetes_secret" "google_oauth" {
   metadata {
