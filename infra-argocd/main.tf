@@ -300,3 +300,38 @@ resource "helm_release" "aws_load_balancer_controller" {
     kubernetes_service_account.alb_controller_sa
   ]
 }
+
+
+#########################################
+# Import App Secrets from AWS Secrets Manager
+#########################################
+
+# Fetch the latest version of your app secret
+data "aws_secretsmanager_secret_version" "app_secrets" {
+  secret_id = "aegonish-eks-cluster-app-secrets-20251106055732"
+}
+
+# Decode the JSON and create a Kubernetes secret from it
+resource "kubernetes_secret" "google_oauth" {
+  metadata {
+    name      = "google-oauth"
+    namespace = "aegonish"
+  }
+
+  data = {
+    GOOGLE_CLIENT_ID       = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET   = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_CLIENT_SECRET"]
+    GOOGLE_REFRESH_TOKEN   = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_REFRESH_TOKEN"]
+    GOOGLE_REDIRECT_URI    = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_REDIRECT_URI"]
+    GOOGLE_DRIVE_FOLDER_ID = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_DRIVE_FOLDER_ID"]
+    MONGO_URI              = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["MONGO_URI"]
+    PORT                   = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["PORT"]
+  }
+
+  type = "Opaque"
+
+  depends_on = [
+    helm_release.argocd,  # make sure ArgoCD is ready
+  ]
+}
+
