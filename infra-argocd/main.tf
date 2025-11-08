@@ -128,7 +128,7 @@ resource "helm_release" "argocd" {
   chart      = "argo-cd"
   version    = "7.5.2"
 
-  # ✅ Key Fix — Make ArgoCD accessible via AWS ALB
+  # ✅ Make ArgoCD accessible via AWS ALB
   set {
     name  = "server.service.type"
     value = "LoadBalancer"
@@ -301,31 +301,31 @@ resource "helm_release" "aws_load_balancer_controller" {
   ]
 }
 
-
 #########################################
-# Import App Secrets from AWS Secrets Manager
+# Import App Secrets from AWS Secrets Manager (Dynamic)
 #########################################
 
-data "aws_secretsmanager_secrets" "app_secrets" {}
+# Get all secrets
+data "aws_secretsmanager_secrets" "all" {}
 
+# Match latest aegonish secret dynamically
 locals {
-  matched_secret_arn = one([
-    for s in data.aws_secretsmanager_secrets.app_secrets.arns :
-    s if can(regex("aegonish-eks-cluster-app-secrets", s))
+  latest_app_secret_arn = one([
+    for arn in data.aws_secretsmanager_secrets.all.arns :
+    arn if can(regex("aegonish-eks-cluster-app-secrets", arn))
   ])
 }
 
-data "aws_secretsmanager_secret" "app_secrets" {
-  arn = local.matched_secret_arn
+# Read the actual secret and its version
+data "aws_secretsmanager_secret" "app" {
+  arn = local.latest_app_secret_arn
 }
 
-data "aws_secretsmanager_secret_version" "app_secrets" {
-  secret_id = data.aws_secretsmanager_secret.app_secrets.id
+data "aws_secretsmanager_secret_version" "app_version" {
+  secret_id = data.aws_secretsmanager_secret.app.id
 }
-#########################################
 
-
-# Decode the JSON and create a Kubernetes secret from it
+# Decode and create K8s secret
 resource "kubernetes_secret" "google_oauth" {
   metadata {
     name      = "google-oauth"
@@ -333,19 +333,18 @@ resource "kubernetes_secret" "google_oauth" {
   }
 
   data = {
-    GOOGLE_CLIENT_ID       = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_CLIENT_ID"]
-    GOOGLE_CLIENT_SECRET   = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_CLIENT_SECRET"]
-    GOOGLE_REFRESH_TOKEN   = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_REFRESH_TOKEN"]
-    GOOGLE_REDIRECT_URI    = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_REDIRECT_URI"]
-    GOOGLE_DRIVE_FOLDER_ID = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["GOOGLE_DRIVE_FOLDER_ID"]
-    MONGO_URI              = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["MONGO_URI"]
-    PORT                   = jsondecode(data.aws_secretsmanager_secret_version.app_secrets.secret_string)["PORT"]
+    GOOGLE_CLIENT_ID       = jsondecode(data.aws_secretsmanager_secret_version.app_version.secret_string)["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET   = jsondecode(data.aws_secretsmanager_secret_version.app_version.secret_string)["GOOGLE_CLIENT_SECRET"]
+    GOOGLE_REFRESH_TOKEN   = jsondecode(data.aws_secretsmanager_secret_version.app_version.secret_string)["GOOGLE_REFRESH_TOKEN"]
+    GOOGLE_REDIRECT_URI    = jsondecode(data.aws_secretsmanager_secret_version.app_version.secret_string)["GOOGLE_REDIRECT_URI"]
+    GOOGLE_DRIVE_FOLDER_ID = jsondecode(data.aws_secretsmanager_secret_version.app_version.secret_string)["GOOGLE_DRIVE_FOLDER_ID"]
+    MONGO_URI              = jsondecode(data.aws_secretsmanager_secret_version.app_version.secret_string)["MONGO_URI"]
+    PORT                   = jsondecode(data.aws_secretsmanager_secret_version.app_version.secret_string)["PORT"]
   }
 
   type = "Opaque"
 
   depends_on = [
-    helm_release.argocd,  # make sure ArgoCD is ready
+    helm_release.argocd
   ]
 }
-
