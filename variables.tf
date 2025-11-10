@@ -67,7 +67,7 @@ variable "node_min_size" {
 variable "node_max_size" {
   description = "Maximum worker node count"
   type        = number
-  default     = 3
+  default     = 4
 }
 
 variable "tags" {
