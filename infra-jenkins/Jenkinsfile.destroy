@@ -16,7 +16,7 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
                         bat "tree"
-                        bat "terraform init -upgrade"
+                        bat "terraform init -force-copy -upgrade"
                     }
                 }
             }
